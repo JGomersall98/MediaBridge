@@ -2,7 +2,7 @@
 
 namespace MediaBridge.Services.Admin
 {
-    public interface IAddUserService
+    public interface IUserService
     {
         Task<AddUserResponse> AddUser(string username, string email);
     }

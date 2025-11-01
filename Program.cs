@@ -23,7 +23,7 @@ builder.Services.AddDbContext<MediaBridgeDbContext>(options =>
 });
 
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
-builder.Services.AddScoped<IAddUserService, AddUserService>();
+builder.Services.AddScoped<IUserService, AddUserService>();
 
 var app = builder.Build();
 

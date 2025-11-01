@@ -9,8 +9,8 @@ namespace MediaBridge.Controllers
     [ApiController]
     public class AddUserController : ControllerBase
     {
-        private readonly IAddUserService _addUserService;
-        public AddUserController(IAddUserService addUserService)
+        private readonly IUserService _addUserService;
+        public AddUserController(IUserService addUserService)
         {
             _addUserService = addUserService;
         }
