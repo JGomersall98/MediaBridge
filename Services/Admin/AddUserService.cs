@@ -90,24 +90,27 @@ namespace MediaBridge.Services.Admin
                 return false;
             }
 
+            // Ensure exactly one '@' symbol
             string[] emailFirstSplit = email.Split('@');
-            string[] emailSecondSplit = emailFirstSplit[1].Split('.');
+            if (emailFirstSplit.Length != 2)
+            {
+                reason = "Email must contain exactly one '@' symbol";
+                return false;
+            }
 
             string emailUsername = emailFirstSplit[0];
-            string emailDomain = emailSecondSplit[1];
-            string emailTLD = "";
-            if (emailSecondSplit.Length > 2)
+            string domainPart = emailFirstSplit[1];
+
+            // Ensure at least one '.' in the domain part
+            string[] emailSecondSplit = domainPart.Split('.');
+            if (emailSecondSplit.Length < 2)
             {
-                for(int i = 1; i < emailSecondSplit.Length; i++)
-                {
-                    emailTLD += '.' + emailSecondSplit[i];
-                }
+                reason = "Domain part of email must contain a '.'";
+                return false;
             }
-            else
-            {
-                emailTLD = emailSecondSplit[1];
-            }
-                
+
+            string emailDomain = emailSecondSplit[0];
+            string emailTLD = string.Join(".", emailSecondSplit.Skip(1));
             if (string.IsNullOrEmpty(emailUsername) || string.IsNullOrEmpty(emailDomain) || string.IsNullOrEmpty(emailTLD))
             {
                 reason = "Invalid email, missing parts";
