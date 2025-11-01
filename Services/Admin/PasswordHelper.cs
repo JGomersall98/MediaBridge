@@ -23,11 +23,13 @@ namespace MediaBridge.Services.Admin
         {
             var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
             var stringChars = new char[8];
-            var random = new Random();
+            var randomBytes = new byte[stringChars.Length];
+            RandomNumberGenerator.Fill(randomBytes);
 
             for (int i = 0; i < stringChars.Length; i++)
             {
-                stringChars[i] = chars[random.Next(chars.Length)];
+                // Use randomBytes[i] to select a character from chars
+                stringChars[i] = chars[randomBytes[i] % chars.Length];
             }
 
             return new String(stringChars);
