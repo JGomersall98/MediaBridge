@@ -79,11 +79,7 @@ namespace MediaBridge.Services.Admin
                 reason = "email is null or empty";
                 return false;
             }
-            if (!email.Contains('.'))
-            {
-                reason = "No '.' symbol";
-                return false;
-            }
+            // Removed redundant '.' check; domain part validation below is more precise
 
             // Ensure exactly one '@' symbol
             string[] emailFirstSplit = email.Split('@');
