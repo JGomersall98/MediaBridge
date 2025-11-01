@@ -79,11 +79,6 @@ namespace MediaBridge.Services.Admin
                 reason = "email is null or empty";
                 return false;
             }
-            if(!email.Contains("@"))
-            {
-                reason = "No '@' symbol";
-                return false;
-            }
             if (!email.Contains('.'))
             {
                 reason = "No '.' symbol";
