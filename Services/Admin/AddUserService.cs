@@ -17,6 +17,9 @@ namespace MediaBridge.Services.Admin
             AddUserResponse response = new AddUserResponse();
             string reason;
 
+            // Check to see if username or email already exist in db
+            // if they exist return false.
+
             // Username
             bool validUsername = CheckUsername(username, out reason);
             if (!validUsername)
@@ -79,7 +82,6 @@ namespace MediaBridge.Services.Admin
                 reason = "email is null or empty";
                 return false;
             }
-            // Removed redundant '.' check; domain part validation below is more precise
 
             // Ensure exactly one '@' symbol
             string[] emailFirstSplit = email.Split('@');
