@@ -18,7 +18,7 @@ namespace MediaBridge.Controllers
         public async Task<IActionResult> AddUser([FromBody] AddUserRequest user)
         {
             AddUserResponse response = await _addUserService.AddUser(user.UserName, user.Email);
-            return Ok();
+            return Ok(response);
         }
     }
 }
