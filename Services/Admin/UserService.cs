@@ -17,8 +17,13 @@ namespace MediaBridge.Services.Admin
             AddUserResponse response = new AddUserResponse();
             string reason;
 
-            // Check to see if username or email already exist in db
-            // if they exist return false.
+            if(_db.Users.Where(u => u.Username.ToLower() == username.ToLower()).Any() 
+                || _db.Users.Where(u => u.Email.ToLower() == email.ToLower()).Any())
+            {
+                response.Reason = "Username or password already exists";
+                response.Success = false;
+                return response;
+            }
 
             // Username
             bool validUsername = CheckUsername(username, out reason);
