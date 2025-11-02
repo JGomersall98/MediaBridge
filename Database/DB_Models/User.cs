@@ -8,15 +8,10 @@
         public required string Salt { get; set; }
         public required string Email { get; set; }
         public bool EmailVerified { get; set; }
-        public DateTime Created { get; set; }
+        public DateTime Created { get; set; } = DateTime.Now;
         public DateTime? LastLogin { get; set; }
         public string? PasswordResetToken { get; set; }
         public DateTime? PasswordResetTokenExpiry { get; set; }
         public DateTime? LastPasswordChange { get; set; }
-
-        public User()
-        {
-            Created = DateTime.UtcNow;
-        }
     }
 }

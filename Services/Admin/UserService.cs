@@ -4,10 +4,10 @@ using MediaBridge.Models.Admin;
 
 namespace MediaBridge.Services.Admin
 {
-    public class AddUserService : IUserService
+    public class UserService : IUserService
     {
         private readonly MediaBridgeDbContext _db;
-        public AddUserService(MediaBridgeDbContext db)
+        public UserService(MediaBridgeDbContext db)
         {
             _db = db;
         }
