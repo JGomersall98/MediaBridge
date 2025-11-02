@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 using Microsoft.EntityFrameworkCore.Design;
 using MediaBridge.Services.Authentication;
+using MediaBridge.Services.Admin;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,6 +23,7 @@ builder.Services.AddDbContext<MediaBridgeDbContext>(options =>
 });
 
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
+builder.Services.AddScoped<IUserService, UserService>();
 
 var app = builder.Build();
 
