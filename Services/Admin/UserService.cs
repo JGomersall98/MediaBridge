@@ -1,6 +1,7 @@
 using MediaBridge.Database;
 using MediaBridge.Database.DB_Models;
 using MediaBridge.Models.Admin;
+using Microsoft.EntityFrameworkCore;
 
 namespace MediaBridge.Services.Admin
 {
@@ -17,7 +18,7 @@ namespace MediaBridge.Services.Admin
             AddUserResponse response = new AddUserResponse();
             string reason;
 
-            if(_db.Users.Where(u => u.Username.ToLower() == username.ToLower()).Any() 
+            if(_db.Users.Where(u => u.Username.ToLower() == username.ToLower()).Any()
                 || _db.Users.Where(u => u.Email.ToLower() == email.ToLower()).Any())
             {
                 response.Reason = "Username or password already exists";
@@ -46,16 +47,28 @@ namespace MediaBridge.Services.Admin
             // Password
             PasswordResponse passwordResponse = PasswordHelper.Generate();
 
+            var userRoleEntity = await _db.Roles
+                .FirstOrDefaultAsync(r => r.RoleValue == "User");
+
             // DB Entry
-            _db.Users.Add(new User
+            var user = new User
             {
                 Username = username,
                 Email = email,
                 PasswordHash = passwordResponse.Hash,
                 Salt = passwordResponse.Salt,
-                EmailVerified = false
+                EmailVerified = false,
+                IsDeleted = false,
+                UserRoles = new List<UserRole>()
+            };
+
+            user.UserRoles.Add(new UserRole
+            {
+                User = user,
+                Role = userRoleEntity
             });
 
+            _db.Users.Add(user);
             await _db.SaveChangesAsync();
 
             // Temp

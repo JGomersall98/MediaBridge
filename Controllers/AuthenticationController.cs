@@ -16,11 +16,11 @@ namespace MediaBridge.Controllers
         }
         
         [HttpPost]
-        public async Task<IActionResult> Post([FromBody] LoginRequest request)
+        public IActionResult Authenticate([FromBody] LoginRequest request)
         {
-            LoginResponse lr = await _authenticationService.LoginAsync(string.Empty, string.Empty);
+            LoginResponse lr =  _authenticationService.LoginAsync(request.Username, request.Password);
 
-            return Ok();
+            return Ok(lr);
         }
     }
 }
