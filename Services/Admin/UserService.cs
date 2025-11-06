@@ -47,9 +47,6 @@ namespace MediaBridge.Services.Admin
             // Password
             PasswordResponse passwordResponse = PasswordHelper.Generate();
 
-            var userRoleEntity = await _db.Roles
-                .FirstOrDefaultAsync(r => r.RoleValue == "User");
-
             // DB Entry
             var user = new User
             {
@@ -61,6 +58,10 @@ namespace MediaBridge.Services.Admin
                 IsDeleted = false,
                 UserRoles = new List<UserRole>()
             };
+
+            // Add Default User Role
+            var userRoleEntity = await _db.Roles
+                .FirstOrDefaultAsync(r => r.RoleValue == "User");
 
             user.UserRoles.Add(new UserRole
             {
