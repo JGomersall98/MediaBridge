@@ -38,9 +38,14 @@ namespace MediaBridge.Services.Authentication
 
             bool IsPasswordMatch = VerifyPassword(password, potentialUser.Salt, potentialUser.PasswordHash);
 
-            response.Token = _tokenService.GenerateToken(potentialUser);
-            response.IsSuccess = true;
+            if (IsPasswordMatch)
+            {
+                response.Token = _tokenService.GenerateToken(potentialUser);
+                response.IsSuccess = true;
+            }
 
+            response.Reason = "Password does not match";
+            response.IsSuccess = false;
             return response;
         }
 
