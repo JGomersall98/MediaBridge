@@ -1,9 +1,15 @@
+using System.Security.Claims;
+using System.Text;
 using MediaBridge.Database;
-using Microsoft.EntityFrameworkCore;
-using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
-using Microsoft.EntityFrameworkCore.Design;
-using MediaBridge.Services.Authentication;
+using MediaBridge.Models.Authentication;
 using MediaBridge.Services.Admin;
+using MediaBridge.Services.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Design;
+using Microsoft.IdentityModel.Tokens;
+using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,6 +18,33 @@ IConfiguration configuration = builder.Configuration;
 
 builder.Services.AddControllers();
 
+var jwtSection = builder.Configuration.GetSection("Jwt");
+builder.Services.Configure<JwtOptions>(jwtSection);
+var key = Encoding.UTF8.GetBytes(jwtSection["Key"]!);
+
+builder.Services
+    .AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtSection["Issuer"],
+            ValidAudience = jwtSection["Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(key),
+            ClockSkew = TimeSpan.Zero,
+            RoleClaimType = ClaimTypes.Role
+        };
+    });
+
+builder.Services.AddAuthorization();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -24,6 +57,7 @@ builder.Services.AddDbContext<MediaBridgeDbContext>(options =>
 
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
 builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<ITokenService, TokenService>();
 
 var app = builder.Build();
 
@@ -37,6 +71,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();

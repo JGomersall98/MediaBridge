@@ -1,11 +1,13 @@
 ﻿using MediaBridge.Models.Admin;
 using MediaBridge.Services.Admin;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MediaBridge.Controllers
 {
     [Route("api/[controller]")]
+    [Authorize(Roles = "Admin")]
     [ApiController]
     public class AddUserController : ControllerBase
     {

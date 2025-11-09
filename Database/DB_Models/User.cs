@@ -13,5 +13,8 @@
         public string? PasswordResetToken { get; set; }
         public DateTime? PasswordResetTokenExpiry { get; set; }
         public DateTime? LastPasswordChange { get; set; }
+        public bool IsDeleted { get; set; }
+
+        public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
     }
 }

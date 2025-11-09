@@ -4,6 +4,6 @@ namespace MediaBridge.Services.Authentication
 {
     public interface IAuthenticationService
     {
-        Task<LoginResponse> LoginAsync(string username, string password);
+        LoginResponse LoginAsync(string username, string password);
     }
 }
