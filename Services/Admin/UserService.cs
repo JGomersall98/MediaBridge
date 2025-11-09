@@ -1,3 +1,4 @@
+using System.Linq;
 using MediaBridge.Database;
 using MediaBridge.Database.DB_Models;
 using MediaBridge.Models.Admin;
@@ -22,7 +23,7 @@ namespace MediaBridge.Services.Admin
                 || _db.Users.Where(u => u.Email.ToLower() == email.ToLower()).Any())
             {
                 response.Reason = "Username or password already exists";
-                response.Success = false;
+                response.IsSuccess = false;
                 return response;
             }
 
@@ -30,7 +31,7 @@ namespace MediaBridge.Services.Admin
             bool validUsername = CheckUsername(username, out reason);
             if (!validUsername)
             {
-                response.Success = false;
+                response.IsSuccess = false;
                 response.Reason = reason;
                 return response;
             }
@@ -39,7 +40,7 @@ namespace MediaBridge.Services.Admin
             bool validEmail = CheckEmail(email, out reason);
             if (!validEmail)
             {
-                response.Success = false;
+                response.IsSuccess = false;
                 response.Reason = reason;
                 return response;
             }
@@ -72,10 +73,47 @@ namespace MediaBridge.Services.Admin
             _db.Users.Add(user);
             await _db.SaveChangesAsync();
 
-            // Temp
-            Console.WriteLine("Password is: " + passwordResponse.Password);
+            response.IsSuccess = true;
 
-            response.Success = true;
+            // Temp, Ideally this will be sent via ses to the email.
+            // Acting as an email verification also.
+            response.Password = passwordResponse.Password;
+
+            return response;
+        }
+        public async Task<GetUserResponse> GetUsers()
+        {
+            GetUserResponse response = new GetUserResponse();
+
+            List<User> users = _db.Users
+                .Include(u => u.UserRoles)
+                .ThenInclude(ur => ur.Role)
+                .ToList();
+
+            if(users.Count == 0)
+            {
+                response.IsSuccess = false;
+                response.Reason = "No users";
+                return response;
+            }
+
+            string highestRole = "";
+
+            List<UserResponse> userResponses = new List<UserResponse>();
+            foreach (User user in users)
+            {
+                highestRole = GetHighestRole(user.UserRoles.ToList()).ToString();
+                UserResponse userResponse = new UserResponse
+                {
+                    Id = user.Id,
+                    Username = user.Username,
+                    Email = user.Email,
+                    Role = highestRole
+                };
+                userResponses.Add(userResponse);
+            }
+            response.UserResponse = userResponses;
+            response.IsSuccess = true;
             return response;
         }
         private bool CheckUsername(string username, out string reason)
@@ -131,5 +169,33 @@ namespace MediaBridge.Services.Admin
             reason = string.Empty;
             return true;
         }      
+        private string GetHighestRole(List<UserRole> roles)
+        {
+            string admin = "Admin";
+            string maintainer = "Maintainer";
+            string user = "User";
+
+            string highestRole = "";
+            string roleValue = string.Empty;
+
+            foreach (UserRole role in roles)
+            {
+                if (highestRole == admin)
+                {
+                    break;
+                }
+                roleValue = role.Role.RoleValue;
+
+                if (highestRole == maintainer)
+                {
+                    if(roleValue == user)
+                    {
+                        continue;
+                    }
+                }
+                highestRole = roleValue;
+            }
+            return highestRole;
+        }
     }
 }
