@@ -1,15 +1,16 @@
-﻿using MediaBridge.Models;
+﻿using System.Threading.Tasks;
+using MediaBridge.Models;
 using MediaBridge.Models.Admin.AddUser;
+using MediaBridge.Models.Admin.EditUser;
+using MediaBridge.Models.Admin.GetUser;
 using MediaBridge.Models.Admin.ResetPassword;
 using MediaBridge.Services.Admin;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Threading.Tasks;
 
 namespace MediaBridge.Controllers
 {
     [Route("api/[controller]")]
-    [Authorize(Roles = "Admin")]
     [ApiController]
     public class UserController : ControllerBase
     {
@@ -35,19 +36,47 @@ namespace MediaBridge.Controllers
         [Authorize(Roles = "Admin")]
         public IActionResult GetUsers()
         {
-            var users = _userService.GetUsers();
+            var users = _userService.GetUserList();
             return Ok(users);
+        }
+
+        // GET: api/User/{id}
+        [HttpGet("{id}")]
+        [Authorize(Roles = "Admin")]
+        public IActionResult GetUser(int id)
+        {
+            GetUserResponse response = _userService.GetUser(id);
+            return Ok(response);
         }
 
         // POST: api/ResetPassword
         [HttpPost]
         [Route("/api/ResetPassword")]
-        [Authorize(Roles = "Admin, Maintainer, User")]
+        [Authorize(Roles = "Admin,Maintainer,User")]
         public IActionResult ResetPassword([FromBody] ResetPasswordRequest resetPasswordRequest)
         {
-            StandardResponse standardResponse = _userService.ResetPassword(resetPasswordRequest);
+            StandardResponse response = _userService.ResetPassword(resetPasswordRequest);
+            return Ok(response);
+        }
+
+        // PUT: api/user/{id}
+        [HttpPut("{id}")]
+        [Authorize(Roles = "Admin")]
+        public IActionResult EditUser(int id, [FromBody] EditUserRequest editUserRequest)
+        {
+            StandardResponse standardResponse = _userService.EditUser(id, editUserRequest);
             return Ok(standardResponse);
         }
+
+        // DELETE: api/user
+        [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin")]
+        public IActionResult DeleteUser(int id)
+        {
+            StandardResponse response = _userService.DeleteUser(id);
+            return Ok(response);
+        }
+
 
         //// GET: api/User/{id}
         //[HttpGet("{id}")]
@@ -59,5 +88,6 @@ namespace MediaBridge.Controllers
 
         //    return Ok(user);
         //}
+
     }
 }

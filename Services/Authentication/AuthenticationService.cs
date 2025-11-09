@@ -50,7 +50,7 @@ namespace MediaBridge.Services.Authentication
                 return response;
             }
 
-            response.Reason = "Password does not match";
+            response.Reason = "Username or password incorrect";
             response.IsSuccess = false;
             return response;
         }

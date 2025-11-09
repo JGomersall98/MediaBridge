@@ -3,6 +3,7 @@ using MediaBridge.Database;
 using MediaBridge.Database.DB_Models;
 using MediaBridge.Models;
 using MediaBridge.Models.Admin.AddUser;
+using MediaBridge.Models.Admin.EditUser;
 using MediaBridge.Models.Admin.GetUser;
 using MediaBridge.Models.Admin.ResetPassword;
 using MediaBridge.Services.Authentication;
@@ -91,9 +92,9 @@ namespace MediaBridge.Services.Admin
 
             return response;
         }
-        public GetUserResponse GetUsers()
+        public GetUserListResponse GetUserList()
         {
-            GetUserResponse response = new GetUserResponse();
+            GetUserListResponse response = new GetUserListResponse();
 
             List<User> users = _db.Users
                 .Include(u => u.UserRoles)
@@ -118,12 +119,131 @@ namespace MediaBridge.Services.Admin
                     Id = user.Id,
                     Username = user.Username,
                     Email = user.Email,
-                    Role = highestRole
+                    Role = highestRole,
+                    LastLogin = GetLastLogin(user),
+                    IsActive = IsUserActive(user)
                 };
                 userResponses.Add(userResponse);
             }
             response.UserResponse = userResponses;
             response.IsSuccess = true;
+            return response;
+        }
+        public GetUserResponse GetUser(int id)
+        {
+            GetUserResponse response = new GetUserResponse();
+
+            User user = _db.Users
+                .Where(u => u.Id == id)
+                .Include(u => u.UserRoles)
+                .ThenInclude(ur => ur.Role)
+                .FirstOrDefault();
+
+            if (user == null)
+            {
+                response.IsSuccess = false;
+                response.Reason = "No user found";
+                return response;
+            }
+
+            List<GetUserRoles> roleList = new List<GetUserRoles>();
+            foreach (var role in user.UserRoles)
+            {
+                var roleObject = role.Role;
+                if (roleObject == null)
+                {
+                    continue;
+                }
+                GetUserRoles getUserRoles = new GetUserRoles();
+                getUserRoles.Name = roleObject.RoleValue;
+                roleList.Add(getUserRoles);
+            }
+
+            UserInfo userInfo = new UserInfo
+            {
+                Id = user.Id,
+                Username = user.Username,
+                Email = user.Email,
+                Created = user.Created.ToString(),
+                LastLogin = user.LastLogin.ToString(),
+                LastPasswordChange = user.LastPasswordChange.ToString(),
+                RoleList = roleList,
+                IsActive = IsUserActive(user)
+            };
+
+            response.UserInfo = userInfo;
+            response.IsSuccess = true;
+            return response;
+        }
+        public StandardResponse EditUser(int id, EditUserRequest editUserRequest)
+        {
+            StandardResponse response = new StandardResponse();
+
+            User user = _db.Users
+                .Where(u => u.Id == id)
+                .Include(u => u.UserRoles)
+                .ThenInclude(ur => ur.Role)
+                .FirstOrDefault();
+
+            if (user == null)
+            {
+                response.IsSuccess = false;
+                response.Reason = "No user found";
+                return response;
+            }
+
+            if(editUserRequest.Username != null)
+            {
+                if (editUserRequest.Username.ToLower() != user.Username.ToLower())
+                {
+                    user.Username = editUserRequest.Username;
+                }
+            }
+            if(editUserRequest.Email != null)
+            {
+                if(editUserRequest.Email.ToLower() != user.Email.ToLower())
+                {
+                    user.Email = editUserRequest.Email;
+                }
+            }
+
+            if (editUserRequest.RoleUpdate != null)
+            {
+                List<UserRole> userRoleList = user.UserRoles.ToList();
+                List<string> userRoles = new List<string>();
+                foreach (var userRole in userRoleList)
+                {
+                    if (userRole.Role != null)
+                    {
+                        if (userRole.Role.RoleValue != null)
+                        {
+                            userRoles.Add(userRole.Role.RoleValue);
+                        }
+                    }
+                }
+                List<string> editUserRoles = new List<string>();
+                foreach (var editUserRole in editUserRequest.RoleUpdate)
+                {
+                    if (editUserRole != null)
+                    {
+                        if (editUserRole.RoleValue != null)
+                        {
+                            editUserRoles.Add(editUserRole.RoleValue);
+                        }
+                    }
+                }
+                List<string> rolesToAdd = GetRolesToAdd(userRoles, editUserRoles);
+                if (rolesToAdd.Count > 0)
+                {
+
+                }
+                List<string> rolesToRemove = GetRolesToRemove(userRoles, editUserRoles);
+                if (rolesToRemove.Count > 0)
+                {
+
+                }
+            }
+
             return response;
         }
         public StandardResponse ResetPassword(ResetPasswordRequest resetPasswordRequest)
@@ -172,6 +292,29 @@ namespace MediaBridge.Services.Admin
 
             response.IsSuccess = true;
 
+            return response;
+        }
+        public StandardResponse DeleteUser(int  userId)
+        {
+            StandardResponse response = new StandardResponse();
+
+            User user = _db.Users
+                .Where (u => u.Id == userId)
+                .Include(u => u.UserRoles)
+                .ThenInclude(ur => ur.Role)
+                .FirstOrDefault();
+
+            if (user == null)
+            {
+                response.IsSuccess = false;
+                response.Reason = "Cannot find user to delete";
+                return response;
+            }
+            _db.RemoveRange(user.UserRoles);
+            _db.Remove(user);
+            _db.SaveChanges();
+
+            response.IsSuccess = true;
             return response;
         }
         private bool CheckUsername(string username, out string reason)
@@ -254,6 +397,72 @@ namespace MediaBridge.Services.Admin
                 highestRole = roleValue;
             }
             return highestRole;
+        }
+        private string GetLastLogin(User user)
+        {
+            if (user.LastLogin == null)
+            {
+                return "Never logged in";
+            }
+
+            var timeDifference = DateTime.Now - user.LastLogin.Value;
+            var totalMinutes = (int)timeDifference.TotalMinutes;
+            var totalHours = (int)timeDifference.TotalHours;
+            var totalDays = (int)timeDifference.TotalDays;
+
+            if (totalMinutes < 1)
+            {
+                return "Just now";
+            }
+            else if (totalMinutes < 60)
+            {
+                return totalMinutes == 1 ? "1 minute ago" : $"{totalMinutes} minutes ago";
+            }
+            else if (totalHours < 24)
+            {
+                return totalHours == 1 ? "1 hour ago" : $"{totalHours} hours ago";
+            }
+            else if (totalDays < 7)
+            {
+                return totalDays == 1 ? "1 day ago" : $"{totalDays} days ago";
+            }
+            else if (totalDays < 30)
+            {
+                var weeks = totalDays / 7;
+                return weeks == 1 ? "1 week ago" : $"{weeks} weeks ago";
+            }
+            else if (totalDays < 365)
+            {
+                var months = totalDays / 30;
+                return months == 1 ? "1 month ago" : $"{months} months ago";
+            }
+            else
+            {
+                var years = totalDays / 365;
+                return years == 1 ? "1 year ago" : $"{years} years ago";
+            }
+        }
+        private bool IsUserActive(User user)
+        {
+            if (user.LastLogin == null)
+            {
+                return false;
+            }
+
+            var daysSinceLastLogin = (DateTime.Now - user.LastLogin.Value).TotalDays;
+            return daysSinceLastLogin < 90;
+        }
+        private List<string> GetRolesToAdd(List<string> userRoles, List<string> editRoles)
+        {
+            return editRoles
+                .Where(role => !userRoles.Contains(role))
+                .ToList();
+        }
+        private List<string> GetRolesToRemove(List<string> userRoles, List<string> editRoles)
+        {
+            return userRoles
+                .Where(role => !editRoles.Contains(role))
+                .ToList();
         }
     }
 }
