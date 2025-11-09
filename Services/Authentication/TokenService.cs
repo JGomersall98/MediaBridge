@@ -17,14 +17,12 @@ namespace MediaBridge.Services.Authentication
             _jwtOptions = jwtOptions.Value;
         }
 
-        // ✅ Accept the whole User, so we can access UserRoles
         public string GenerateToken(User user)
         {
             var keyBytes = Encoding.UTF8.GetBytes(_jwtOptions.Key);
             var securityKey = new SymmetricSecurityKey(keyBytes);
             var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
-            // ✅ Use a List<Claim>, not an array
             var claims = new List<Claim>
             {
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
@@ -33,7 +31,6 @@ namespace MediaBridge.Services.Authentication
                 new Claim(ClaimTypes.Name, user.Username),
             };
 
-            // ✅ Add ALL roles as separate claims
             foreach (var userRole in user.UserRoles)
             {
                 if (userRole.Role != null && !string.IsNullOrWhiteSpace(userRole.Role.RoleValue))

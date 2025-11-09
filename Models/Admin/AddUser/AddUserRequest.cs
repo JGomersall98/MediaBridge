@@ -1,6 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
 
-namespace MediaBridge.Models.Admin
+namespace MediaBridge.Models.Admin.AddUser
 {
     public class AddUserRequest
     {

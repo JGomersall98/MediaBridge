@@ -38,23 +38,37 @@ namespace MediaBridge.Services.Authentication
 
             bool IsPasswordMatch = VerifyPassword(password, potentialUser.Salt, potentialUser.PasswordHash);
 
+            response.IsDefaultPassword = IsDefaultPassword(potentialUser);
+
             if (IsPasswordMatch)
             {
+                potentialUser.LastLogin = DateTime.Now;
+                _db.SaveChanges();
+
                 response.Token = _tokenService.GenerateToken(potentialUser);
                 response.IsSuccess = true;
+                return response;
             }
 
-            response.Reason = "Password does not match";
+            response.Reason = "Username or password incorrect";
             response.IsSuccess = false;
             return response;
         }
 
-        private bool VerifyPassword(string password, string salt, string hashedPasssword)
+        public bool VerifyPassword(string password, string salt, string hashedPasssword)
         {
             byte[] byteSalt = Convert.FromBase64String(salt);
             string pwd = Convert.ToBase64String(PasswordHelper.HashPassword(password, byteSalt));
 
             if (hashedPasssword == pwd)
+            {
+                return true;
+            }
+            return false;
+        }
+        private bool IsDefaultPassword(User user)
+        {
+            if (user.LastPasswordChange == null)
             {
                 return true;
             }
