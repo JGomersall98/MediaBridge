@@ -22,7 +22,7 @@ namespace MediaBridge.Services.Admin
             if(_db.Users.Where(u => u.Username.ToLower() == username.ToLower()).Any()
                 || _db.Users.Where(u => u.Email.ToLower() == email.ToLower()).Any())
             {
-                response.Reason = "Username or password already exists";
+                response.Reason = "Username or email already exists";
                 response.IsSuccess = false;
                 return response;
             }
