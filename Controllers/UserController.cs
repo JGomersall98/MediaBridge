@@ -1,4 +1,6 @@
-﻿using MediaBridge.Models.Admin;
+﻿using MediaBridge.Models;
+using MediaBridge.Models.Admin.AddUser;
+using MediaBridge.Models.Admin.ResetPassword;
 using MediaBridge.Services.Admin;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -22,9 +24,9 @@ namespace MediaBridge.Controllers
         [HttpPost]
         [Route("/api/AddUser")]
         [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> AddUser([FromBody] AddUserRequest user)
+        public async Task<IActionResult> AddUser([FromBody] AddUserRequest newUser)
         {
-            var response = await _userService.AddUser(user.UserName, user.Email);
+            var response = await _userService.AddUser(newUser);
             return Ok(response);
         }
 
@@ -35,6 +37,16 @@ namespace MediaBridge.Controllers
         {
             var users = _userService.GetUsers();
             return Ok(users);
+        }
+
+        // POST: api/ResetPassword
+        [HttpPost]
+        [Route("/api/ResetPassword")]
+        [Authorize(Roles = "Admin, Maintainer, User")]
+        public IActionResult ResetPassword([FromBody] ResetPasswordRequest resetPasswordRequest)
+        {
+            StandardResponse standardResponse = _userService.ResetPassword(resetPasswordRequest);
+            return Ok(standardResponse);
         }
 
         //// GET: api/User/{id}

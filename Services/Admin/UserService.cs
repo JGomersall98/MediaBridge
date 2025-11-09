@@ -1,7 +1,12 @@
-using System.Linq;
+using System.Threading.Tasks;
 using MediaBridge.Database;
 using MediaBridge.Database.DB_Models;
-using MediaBridge.Models.Admin;
+using MediaBridge.Models;
+using MediaBridge.Models.Admin.AddUser;
+using MediaBridge.Models.Admin.GetUser;
+using MediaBridge.Models.Admin.ResetPassword;
+using MediaBridge.Services.Authentication;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 
 namespace MediaBridge.Services.Admin
@@ -9,13 +14,18 @@ namespace MediaBridge.Services.Admin
     public class UserService : IUserService
     {
         private readonly MediaBridgeDbContext _db;
-        public UserService(MediaBridgeDbContext db)
+        private readonly IAuthenticationService _authenticationService;
+        public UserService(MediaBridgeDbContext db, IAuthenticationService authenticationService)
         {
             _db = db;
+            _authenticationService = authenticationService;
         }
 
-        public async Task<AddUserResponse> AddUser(string username, string email)
+        public async Task<AddUserResponse> AddUser(AddUserRequest newUser)
         {
+            string username = newUser.UserName;
+            string email = newUser.Email;
+
             AddUserResponse response = new AddUserResponse();
             string reason;
 
@@ -116,6 +126,54 @@ namespace MediaBridge.Services.Admin
             response.IsSuccess = true;
             return response;
         }
+        public StandardResponse ResetPassword(ResetPasswordRequest resetPasswordRequest)
+        {
+            StandardResponse response = new StandardResponse();
+
+            string newPassword = resetPasswordRequest.NewPassword;
+            string newPasswordConfirmed = resetPasswordRequest.ConfirmPassword;
+
+            if (newPassword != newPasswordConfirmed)
+            {
+                response.IsSuccess = false;
+                response.Reason = "New passwords do not match";
+                return response;
+            }
+
+            User user = _db.Users
+                .Where(u => u.Id == resetPasswordRequest.UserId)
+                .FirstOrDefault();
+
+            if (user == null)
+            {
+                response.IsSuccess = false;
+                response.Reason = "User not found";
+                return response;
+            }
+
+            bool IsPasswordMatch = _authenticationService.VerifyPassword(resetPasswordRequest.CurrentPassword, user.Salt, user.PasswordHash);
+
+            if (IsPasswordMatch == false)
+            {
+                response.IsSuccess = false;
+                response.Reason = "Password is incorrect";
+                return response;
+            }
+
+            byte[] salt = PasswordHelper.GenerateSalt();
+            string saltBase64 = Convert.ToBase64String(salt);
+            string passwordHash = Convert.ToBase64String(PasswordHelper.HashPassword(newPassword, salt));
+
+            user.Salt = saltBase64;
+            user.PasswordHash = passwordHash;
+            user.LastPasswordChange = DateTime.Now;
+
+            _db.SaveChanges();
+
+            response.IsSuccess = true;
+
+            return response;
+        }
         private bool CheckUsername(string username, out string reason)
         {
             
@@ -198,4 +256,10 @@ namespace MediaBridge.Services.Admin
             return highestRole;
         }
     }
+}
+public class PasswordResponse
+{
+    public string Password { get; set; } = default!;
+    public string Salt { get; set; } = default!;
+    public string Hash { get; set; } = default!;
 }

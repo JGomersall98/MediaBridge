@@ -1,12 +1,10 @@
 ﻿using MediaBridge.Database.DB_Models;
 
-namespace MediaBridge.Models.Admin
+namespace MediaBridge.Models.Admin.GetUser
 {
-    public class GetUserResponse
+    public class GetUserResponse : StandardResponse
     {
-        public bool IsSuccess { get; set; }
         public List<UserResponse>? UserResponse { get; set;}
-        public string? Reason { get; set; }
     }
     public class UserResponse
     {
