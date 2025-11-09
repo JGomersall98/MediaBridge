@@ -42,6 +42,7 @@ namespace MediaBridge.Services.Authentication
             {
                 response.Token = _tokenService.GenerateToken(potentialUser);
                 response.IsSuccess = true;
+                return response;
             }
 
             response.Reason = "Password does not match";

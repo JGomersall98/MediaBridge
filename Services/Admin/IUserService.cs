@@ -5,6 +5,6 @@ namespace MediaBridge.Services.Admin
     public interface IUserService
     {
         Task<AddUserResponse> AddUser(string username, string email);
-        Task<GetUserResponse> GetUsers();
+        GetUserResponse GetUsers();
     }
 }

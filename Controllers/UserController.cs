@@ -21,6 +21,7 @@ namespace MediaBridge.Controllers
         // POST: api/User
         [HttpPost]
         [Route("/api/AddUser")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> AddUser([FromBody] AddUserRequest user)
         {
             var response = await _userService.AddUser(user.UserName, user.Email);
@@ -29,9 +30,10 @@ namespace MediaBridge.Controllers
 
         // GET: api/User
         [HttpGet]
-        public async Task<IActionResult> GetUsers()
+        [Authorize(Roles = "Admin")]
+        public IActionResult GetUsers()
         {
-            var users = await _userService.GetUsers();
+            var users = _userService.GetUsers();
             return Ok(users);
         }
 

@@ -81,7 +81,7 @@ namespace MediaBridge.Services.Admin
 
             return response;
         }
-        public async Task<GetUserResponse> GetUsers()
+        public GetUserResponse GetUsers()
         {
             GetUserResponse response = new GetUserResponse();
 
