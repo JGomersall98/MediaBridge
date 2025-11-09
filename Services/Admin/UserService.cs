@@ -179,6 +179,36 @@ namespace MediaBridge.Services.Admin
         {
             StandardResponse response = new StandardResponse();
 
+            if (editUserRequest.Username != null)
+            {
+                User duplicateUsername = _db.Users
+                    .Where(u => u.Username.ToLower() == editUserRequest.Username.ToLower())
+                    .Where(u => u.Id != id)
+                    .FirstOrDefault();
+
+                if (duplicateUsername != null)
+                {
+                    response.IsSuccess = false;
+                    response.Reason = "Username already in use";
+                    return response;
+                }
+            }
+
+            if (editUserRequest.Email != null)
+            {
+                User duplicateEmail = _db.Users
+                    .Where(u => u.Email.ToLower() == editUserRequest.Email.ToLower())
+                    .Where(u => u.Id != id)
+                    .FirstOrDefault();
+
+                if (duplicateEmail != null)
+                {
+                    response.IsSuccess = false;
+                    response.Reason = "Email already in use";
+                    return response;
+                }
+            }
+
             User user = _db.Users
                 .Where(u => u.Id == id)
                 .Include(u => u.UserRoles)
@@ -192,58 +222,15 @@ namespace MediaBridge.Services.Admin
                 return response;
             }
 
-            if(editUserRequest.Username != null)
-            {
-                if (editUserRequest.Username.ToLower() != user.Username.ToLower())
-                {
-                    user.Username = editUserRequest.Username;
-                }
-            }
-            if(editUserRequest.Email != null)
-            {
-                if(editUserRequest.Email.ToLower() != user.Email.ToLower())
-                {
-                    user.Email = editUserRequest.Email;
-                }
-            }
+            UpdateUserBasicInfo(user, editUserRequest);
 
             if (editUserRequest.RoleUpdate != null)
             {
-                List<UserRole> userRoleList = user.UserRoles.ToList();
-                List<string> userRoles = new List<string>();
-                foreach (var userRole in userRoleList)
-                {
-                    if (userRole.Role != null)
-                    {
-                        if (userRole.Role.RoleValue != null)
-                        {
-                            userRoles.Add(userRole.Role.RoleValue);
-                        }
-                    }
-                }
-                List<string> editUserRoles = new List<string>();
-                foreach (var editUserRole in editUserRequest.RoleUpdate)
-                {
-                    if (editUserRole != null)
-                    {
-                        if (editUserRole.RoleValue != null)
-                        {
-                            editUserRoles.Add(editUserRole.RoleValue);
-                        }
-                    }
-                }
-                List<string> rolesToAdd = GetRolesToAdd(userRoles, editUserRoles);
-                if (rolesToAdd.Count > 0)
-                {
-
-                }
-                List<string> rolesToRemove = GetRolesToRemove(userRoles, editUserRoles);
-                if (rolesToRemove.Count > 0)
-                {
-
-                }
+                UpdateUserRoles(user, editUserRequest.RoleUpdate);
             }
 
+            _db.SaveChanges();
+            response.IsSuccess = true;
             return response;
         }
         public StandardResponse ResetPassword(ResetPasswordRequest resetPasswordRequest)
@@ -452,6 +439,91 @@ namespace MediaBridge.Services.Admin
             var daysSinceLastLogin = (DateTime.Now - user.LastLogin.Value).TotalDays;
             return daysSinceLastLogin < 90;
         }
+        private void UpdateUserBasicInfo(User user, EditUserRequest editUserRequest)
+        {
+            if (editUserRequest.Username != null && editUserRequest.Username.ToLower() != user.Username.ToLower())
+            {
+                user.Username = editUserRequest.Username;
+            }
+
+            if (editUserRequest.Email != null && editUserRequest.Email.ToLower() != user.Email.ToLower())
+            {
+                user.Email = editUserRequest.Email;
+            }
+        }
+
+        private void UpdateUserRoles(User user, List<RoleUpdate> roleUpdates)
+        {
+            var currentRoles = ExtractRoleValues(user.UserRoles.ToList());
+            var requestedRoles = ExtractRoleValues(roleUpdates);
+
+            var rolesToAdd = GetRolesToAdd(currentRoles, requestedRoles);
+            var rolesToRemove = GetRolesToRemove(currentRoles, requestedRoles);
+
+            // Remove roles first - we need to explicitly delete the UserRole entities
+            RemoveRolesFromUser(user, rolesToRemove);
+            
+            // Add new roles
+            AddRolesToUser(user, rolesToAdd);
+        }
+
+        private void AddRolesToUser(User user, List<string> rolesToAdd)
+        {
+            foreach (string roleToAdd in rolesToAdd)
+            {
+                var roleEntity = _db.Roles.FirstOrDefault(r => r.RoleValue == roleToAdd);
+                if (roleEntity != null)
+                {
+                    var newUserRole = new UserRole
+                    {
+                        UserId = user.Id,
+                        RoleId = roleEntity.Id,
+                        User = user,
+                        Role = roleEntity
+                    };
+                user.UserRoles.Add(newUserRole);
+                }
+            }
+        }
+
+        private void RemoveRolesFromUser(User user, List<string> rolesToRemove)
+        {
+            // Create a list of UserRole entities to remove
+            var userRolesToRemove = new List<UserRole>();
+            
+            foreach (string roleToRemove in rolesToRemove)
+            {
+                var userRoleToRemove = user.UserRoles
+                .FirstOrDefault(ur => ur.Role != null && ur.Role.RoleValue == roleToRemove);
+                if (userRoleToRemove != null)
+                {
+                    userRolesToRemove.Add(userRoleToRemove);
+                }
+            }
+
+            // Remove from both the collection and mark for deletion
+            foreach (var userRoleToRemove in userRolesToRemove)
+            {
+                user.UserRoles.Remove(userRoleToRemove);
+                _db.User_Roles.Remove(userRoleToRemove);
+            }
+        }
+        private List<string> ExtractRoleValues(List<UserRole> userRoles)
+        {
+            return userRoles
+                .Where(ur => ur.Role?.RoleValue != null)
+                .Select(ur => ur.Role.RoleValue)
+                .ToList();
+        }
+
+        private List<string> ExtractRoleValues(List<RoleUpdate> roleUpdates)
+        {
+            return roleUpdates
+                .Where(ru => ru?.RoleValue != null)
+                .Select(ru => ru.RoleValue)
+                .ToList();
+        }
+
         private List<string> GetRolesToAdd(List<string> userRoles, List<string> editRoles)
         {
             return editRoles
