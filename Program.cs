@@ -4,6 +4,7 @@ using MediaBridge.Database;
 using MediaBridge.Models.Authentication;
 using MediaBridge.Services.Admin;
 using MediaBridge.Services.Authentication;
+using MediaBridge.Services.Dashboard;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
@@ -58,6 +59,8 @@ builder.Services.AddDbContext<MediaBridgeDbContext>(options =>
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<IDashboardService, DashboardService>();
+builder.Services.AddHttpClient();
 
 var app = builder.Build();
 

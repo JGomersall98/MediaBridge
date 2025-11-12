@@ -14,6 +14,8 @@ namespace MediaBridge.Database
         public DbSet<User> Users { get; set; }
         public DbSet<Role> Roles { get; set; }
         public DbSet<UserRole> User_Roles { get; set; }
+        public DbSet<Config> Configs { get; set; }
+        public DbSet<CachedData> CachedData { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -37,6 +39,23 @@ namespace MediaBridge.Database
                 .WithMany(r => r.UserRole)
                 .HasForeignKey(r => r.RoleId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<Config>()
+                .HasKey(c => c.Id);
+
+            modelBuilder.Entity<Config>()
+                .HasIndex(c => c.Key)
+                .IsUnique();
+
+            modelBuilder.Entity<CachedData>()
+                .HasKey(c => c.Id);
+
+            modelBuilder.Entity<CachedData>()
+                .HasIndex(c => c.CacheKey)
+                .IsUnique();
+
+            modelBuilder.Entity<CachedData>()
+                .HasIndex(c => c.ExpiresAt);
 
         }
     }
