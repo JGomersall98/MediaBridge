@@ -4,6 +4,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MediaBridge.Services.Helpers
 {
+    public interface ICaching
+    {
+        Task<CachedData?> GetCachedDataAsync(string cacheKey);
+        Task CacheDataAsync(string cacheKey, string jsonData, int hours);
+    }
+
     public class Caching : ICaching
     {
         private readonly MediaBridgeDbContext _db;

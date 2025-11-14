@@ -22,7 +22,7 @@ namespace MediaBridge.Services.Dashboard
         private readonly JsonSerializerOptions _jsonOptions;
 
         public DashboardService(MediaBridgeDbContext db, ILogger<DashboardService> logger, 
-            Caching caching, HttpClientService httpClientService, GetConfig config )
+            ICaching caching, IHttpClientService httpClientService, IGetConfig config )
         {
             _db = db;
             _logger = logger;
@@ -47,8 +47,8 @@ namespace MediaBridge.Services.Dashboard
                 {
                     return BuildDashboardMoviesResponse(cachedData, true);
                 }
-
-                var freshData = await FetchMediaFromApiAsync(MOVIES_ENDPOINT_KEY);
+                string apiUrl = await _config.GetConfigValueAsync(MOVIES_ENDPOINT_KEY);
+                var freshData = await FetchMediaFromApiAsync(apiUrl);
                 if (freshData != null)
                 {
                     await _caching.CacheDataAsync(MOVIES_CACHE_KEY, JsonSerializer.Serialize(freshData, _jsonOptions), CACHE_DURATION_HOURS);
@@ -79,7 +79,9 @@ namespace MediaBridge.Services.Dashboard
                     return BuildDashboardTvShowsResponse(cachedData, true);
                 }
 
-                var freshData = await FetchMediaFromApiAsync(TVSHOWS_ENDPOINT_KEY);
+                string apiUrl = await _config.GetConfigValueAsync(TVSHOWS_ENDPOINT_KEY);
+
+                var freshData = await FetchMediaFromApiAsync(apiUrl);
                 if (freshData != null)
                 {
                     string jsonData = JsonSerializer.Serialize(freshData, _jsonOptions);
@@ -106,7 +108,8 @@ namespace MediaBridge.Services.Dashboard
         {
             try
             {
-                var freshData = await FetchMediaFromApiAsync(MOVIES_ENDPOINT_KEY);
+                string apiUrl = await _config.GetConfigValueAsync(MOVIES_ENDPOINT_KEY);
+                var freshData = await FetchMediaFromApiAsync(apiUrl);
                 if (freshData != null)
                 {
                     string jsonData = JsonSerializer.Serialize(freshData, _jsonOptions);
@@ -124,9 +127,10 @@ namespace MediaBridge.Services.Dashboard
 
         public async Task<bool> RefreshTvShowCacheAsync()
         {
+            var apiUrl = await _config.GetConfigValueAsync(TVSHOWS_ENDPOINT_KEY);
             try
             {
-                var freshData = await FetchMediaFromApiAsync(TVSHOWS_ENDPOINT_KEY);
+                var freshData = await FetchMediaFromApiAsync(apiUrl);
                 if (freshData != null)
                 {
                     string jsonData = JsonSerializer.Serialize(freshData, _jsonOptions);
@@ -189,9 +193,8 @@ namespace MediaBridge.Services.Dashboard
             return response;
         }
 
-        private async Task<MdbListApiResponse?> FetchMediaFromApiAsync(string endpointKey)
+        private async Task<MdbListApiResponse?> FetchMediaFromApiAsync(string? apiUrl)
         {
-            var apiUrl = await _config.GetConfigValueAsync(endpointKey);
             var apiKey = await _config.GetConfigValueAsync("mdblist_api_key");
 
             if (string.IsNullOrEmpty(apiUrl) || string.IsNullOrEmpty(apiKey))

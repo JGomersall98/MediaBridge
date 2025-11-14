@@ -5,6 +5,10 @@ using Microsoft.AspNetCore.Http;
 
 namespace MediaBridge.Services.Helpers
 {
+    public interface IHttpClientService
+    {
+        Task<string> GetStringAsync(string url);
+    }
     public class HttpClientService : IHttpClientService
     {
         private readonly System.Net.Http.HttpClient _httpClient;

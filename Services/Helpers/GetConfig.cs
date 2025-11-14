@@ -4,6 +4,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MediaBridge.Services.Helpers
 {
+    public interface IGetConfig
+    {
+        Task<string?> GetConfigValueAsync(string key);
+    }
     public class GetConfig : IGetConfig
     {
         private readonly MediaBridgeDbContext _db;
