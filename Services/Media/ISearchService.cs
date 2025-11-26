@@ -5,6 +5,6 @@ namespace MediaBridge.Services.Media
 {
     public interface ISearchService
     {
-        Task<MdbListMediaSearchResponse> MdbListSearch(string media, string query);
+        Task<MdbListMediaSearchResponse> MdbListMovieSearch(string media, string query);
     }
 }

@@ -18,7 +18,7 @@ namespace MediaBridge.Controllers.Media
         [Authorize(Roles = "Admin,Maintainer,User")]
         public async Task<IActionResult> SearchMedia([FromQuery] string mediaType, string query)
         {
-            var response = await _searchFunction.MdbListSearch(mediaType, query);
+            var response = await _searchFunction.MdbListMovieSearch(mediaType, query);
             return Ok(response);
         }
     }
