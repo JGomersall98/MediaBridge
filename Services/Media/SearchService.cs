@@ -129,7 +129,7 @@ namespace MediaBridge.Services.Media
                     {
                         runtime = CalculateRunTimeHours(runTimeValue);
                     }
-
+                    
                     var mediaItem = new MediaItem
                     {
                         Id = (int)dynamicInfo.Id,
@@ -137,6 +137,7 @@ namespace MediaBridge.Services.Media
                         Title = search.Title ?? string.Empty,
                         Poster = (string?)dynamicInfo.Poster,
                         ImdbId = search.Ids.Imdbid,
+                        TmbId = search.Ids.TmbId,
                         ReleaseYear = (int?)dynamicInfo.Year,
                         Description = (string?)dynamicInfo.Description,
                         Runtime = runtime,
@@ -195,8 +196,8 @@ namespace MediaBridge.Services.Media
             {
                 ids = traktIds,
             });
-
-            return await _httpClientService.PostStringAsync(fullUrl, payload);
+            HttpResponseString httpResponseString = await _httpClientService.PostStringAsync(fullUrl, payload);
+            return httpResponseString.Response;
         }
         private async Task<string> BuildSearchRequest(string media, string query)
         {
@@ -250,6 +251,8 @@ namespace MediaBridge.Services.Media
     {
         public string? Imdbid { get; set; }
         public int Traktid { get; set; }
+        [JsonPropertyName("tmdbid")]
+        public int TmbId { get; set; }
     }
     public class MbdListInfoRequest
     {

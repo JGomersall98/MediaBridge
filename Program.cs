@@ -62,10 +62,11 @@ builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
+builder.Services.AddScoped<ISearchService, SearchService>();
+builder.Services.AddScoped<IMediaService, MediaService>();
 builder.Services.AddTransient<ICaching, Caching>();
 builder.Services.AddTransient<IHttpClientService, HttpClientService>();
 builder.Services.AddTransient<IGetConfig, GetConfig>();
-builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddHttpClient();
 
 var app = builder.Build();

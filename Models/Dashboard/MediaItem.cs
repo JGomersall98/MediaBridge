@@ -11,6 +11,7 @@
         public string? Description { get; set; } = "";
         public string? Runtime { get; set; }
         public List<MediaSeasonItem>? Seasons { get; set; }
+        public int TmbId { get; set; }
 
     }
     public class MediaSeasonItem

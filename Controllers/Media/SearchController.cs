@@ -14,6 +14,8 @@ namespace MediaBridge.Controllers.Media
         {
             _searchFunction = searchFunction;
         }
+
+        // GET : /api/search
         [HttpGet]
         [Authorize(Roles = "Admin,Maintainer,User")]
         public async Task<IActionResult> SearchMedia([FromQuery] string mediaType, string query)
