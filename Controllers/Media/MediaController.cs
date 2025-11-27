@@ -1,4 +1,7 @@
-﻿using MediaBridge.Models;
+﻿using System.Security.Claims;
+using MediaBridge.Database.DB_Models;
+using MediaBridge.Extensions;
+using MediaBridge.Models;
 using MediaBridge.Services.Media;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -23,9 +26,12 @@ namespace MediaBridge.Controllers.Media
         {
             StandardResponse response = new StandardResponse();
 
+            var userId = User.GetUserId();
+            var username = User.GetUsername();
+
             if (mediaType.ToLower() == "movie")
             {
-                response = await _mediaService.DownloadMovie(tmbId);
+                response = await _mediaService.DownloadMovie(tmbId, userId, username);
             }
             else
             {

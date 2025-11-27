@@ -2,6 +2,8 @@
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using MediaBridge.Database;
+using MediaBridge.Database.DB_Models;
 using MediaBridge.Models;
 using MediaBridge.Services.Helpers;
 
@@ -13,7 +15,8 @@ namespace MediaBridge.Services.Media
         private readonly IHttpClientService _httpClientService;
         private string? _apiKey;
         private readonly JsonSerializerOptions _jsonOptions;
-        public MediaService(IGetConfig config, IHttpClientService httpClientService)
+        private readonly MediaBridgeDbContext _db;
+        public MediaService(IGetConfig config, IHttpClientService httpClientService, MediaBridgeDbContext db)
         {
             _config = config;
             _httpClientService = httpClientService;
@@ -21,9 +24,10 @@ namespace MediaBridge.Services.Media
             {
                 PropertyNameCaseInsensitive = true
             };
+            _db = db;
         }
 
-        public async Task<StandardResponse> DownloadMovie(int tmbId)
+        public async Task<StandardResponse> DownloadMovie(int tmbId, int userId, string username)
         {
             StandardResponse response = new StandardResponse();
 
@@ -36,11 +40,43 @@ namespace MediaBridge.Services.Media
                 RadarrErrorResponse error = JsonSerializer.Deserialize<List<RadarrErrorResponse>>(requestResponse.Response, _jsonOptions)!.FirstOrDefault();
                 response.IsSuccess = false;
                 response.Reason = $"Failed sending movie request to Radarr: {error?.ErrorMessage ?? "Unknown error"}";
+
+                await LogMediaRequest(userId, username, tmbId, "movie", movieDetails.Title!, false, error?.ErrorMessage);
+
                 return response;
             }
 
             response.IsSuccess = true;
+
+            await LogMediaRequest(userId, username, tmbId, "movie", movieDetails.Title!, true, null);
+
             return response;
+        }
+        private async Task LogMediaRequest(int userId, string username, int tmdbId, string mediaType, string mediaTitle, bool isSuccessful, string? errorMessage)
+        {
+            try
+            {
+                var logEntry = new MediaRequestLog
+                {
+                    UserId = userId,
+                    Username = username,
+                    TmdbId = tmdbId,
+                    MediaType = mediaType,
+                    MediaTitle = mediaTitle,
+                    IsSuccessful = isSuccessful,
+                    ErrorMessage = errorMessage,
+                    RequestedAt = DateTime.UtcNow
+                };
+
+                _db.MediaRequestLogs.Add(logEntry);
+                await _db.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                // Log to console or your logging framework if database logging fails
+                Console.WriteLine($"Failed to log media request: {ex.Message}");
+                // Don't throw here to avoid breaking the main functionality
+            }
         }
         private async Task<RadarrGetMovieResponse> GetMovieDetails(int tmbId)
         {

@@ -1,4 +1,5 @@
-﻿using MediaBridge.Services.Media;
+﻿using System.Security.Claims;
+using MediaBridge.Services.Media;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -20,6 +21,10 @@ namespace MediaBridge.Controllers.Media
         [Authorize(Roles = "Admin,Maintainer,User")]
         public async Task<IActionResult> SearchMedia([FromQuery] string mediaType, string query)
         {
+            // Extract user information from JWT claims
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            var usernameClaim = User.FindFirst(ClaimTypes.Name);
+
             var response = await _searchFunction.MdbListMovieSearch(mediaType, query);
             return Ok(response);
         }

@@ -4,6 +4,6 @@ namespace MediaBridge.Services.Media
 {
     public interface IMediaService
     {
-        Task<StandardResponse> DownloadMovie(int tmbId);
+        Task<StandardResponse> DownloadMovie(int tmbId, int userId, string username);
     }
 }

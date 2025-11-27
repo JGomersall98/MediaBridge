@@ -16,9 +16,12 @@ namespace MediaBridge.Database
         public DbSet<UserRole> User_Roles { get; set; }
         public DbSet<Config> Configs { get; set; }
         public DbSet<CachedData> CachedData { get; set; }
+        public DbSet<MediaRequestLog> MediaRequestLogs { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            // User, Role, UserRole configuration
+
             modelBuilder.Entity<User>()
                 .HasKey(u => u.Id);
 
@@ -40,12 +43,16 @@ namespace MediaBridge.Database
                 .HasForeignKey(r => r.RoleId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            // Config configuration
+
             modelBuilder.Entity<Config>()
                 .HasKey(c => c.Id);
 
             modelBuilder.Entity<Config>()
                 .HasIndex(c => c.Key)
                 .IsUnique();
+
+            // CachedData configuration
 
             modelBuilder.Entity<CachedData>()
                 .HasKey(c => c.Id);
@@ -56,6 +63,26 @@ namespace MediaBridge.Database
 
             modelBuilder.Entity<CachedData>()
                 .HasIndex(c => c.ExpiresAt);
+
+            // MediaRequestLog configuration
+
+            modelBuilder.Entity<MediaRequestLog>()
+                .HasKey(m => m.Id);
+
+            modelBuilder.Entity<MediaRequestLog>()
+                .HasOne(m => m.User)
+                .WithMany()
+                .HasForeignKey(m => m.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<MediaRequestLog>()
+                .HasIndex(m => m.UserId);
+
+            modelBuilder.Entity<MediaRequestLog>()
+                .HasIndex(m => m.RequestedAt);
+
+            modelBuilder.Entity<MediaRequestLog>()
+                .HasIndex(m => m.MediaType);
 
         }
     }
