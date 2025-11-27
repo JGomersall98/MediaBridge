@@ -112,7 +112,7 @@ namespace MediaBridge.Services.Media
                         {
                             var mediaSeasonItem = new MediaSeasonItem
                             {
-                                TmbdId = season.TmdbId,
+                                TmdbId = season.TmdbId,
                                 SeasonNumber = season.SeasonNumber,
                                 EpisodeCount = season.EpisodeCount,
                                 Title = season.Name,
@@ -137,7 +137,7 @@ namespace MediaBridge.Services.Media
                         Title = search.Title ?? string.Empty,
                         Poster = (string?)dynamicInfo.Poster,
                         ImdbId = search.Ids.Imdbid,
-                        TmbId = search.Ids.TmbId,
+                        TmdbId = search.Ids.TmdbId,
                         ReleaseYear = (int?)dynamicInfo.Year,
                         Description = (string?)dynamicInfo.Description,
                         Runtime = runtime,
@@ -252,7 +252,7 @@ namespace MediaBridge.Services.Media
         public string? Imdbid { get; set; }
         public int Traktid { get; set; }
         [JsonPropertyName("tmdbid")]
-        public int TmbId { get; set; }
+        public int TmdbId { get; set; }
     }
     public class MbdListInfoRequest
     {
