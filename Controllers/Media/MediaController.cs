@@ -19,7 +19,7 @@ namespace MediaBridge.Controllers.Media
         // POST : /api/download
         [HttpPost]
         [Authorize(Roles = "Admin,Maintainer,User")]
-        public async Task<IActionResult> Movie([FromQuery] int tmbId, string mediaType)
+        public async Task<IActionResult> Post([FromQuery] int tmbId, string mediaType)
         {
             StandardResponse response = new StandardResponse();
 
