@@ -1,6 +1,5 @@
 ﻿using MediaBridge.Database.DB_Models;
 using Microsoft.EntityFrameworkCore;
-using Swashbuckle.AspNetCore.SwaggerUI;
 
 namespace MediaBridge.Database
 {
@@ -20,8 +19,10 @@ namespace MediaBridge.Database
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            // User, Role, UserRole configuration
-
+            modelBuilder.Entity<CachedData>().ToTable("cached_data");
+            modelBuilder.Entity<MediaRequestLog>().ToTable("media_request_logs");
+            
+            // User configuration
             modelBuilder.Entity<User>()
                 .HasKey(u => u.Id);
 
@@ -44,7 +45,6 @@ namespace MediaBridge.Database
                 .OnDelete(DeleteBehavior.Restrict);
 
             // Config configuration
-
             modelBuilder.Entity<Config>()
                 .HasKey(c => c.Id);
 
@@ -53,7 +53,6 @@ namespace MediaBridge.Database
                 .IsUnique();
 
             // CachedData configuration
-
             modelBuilder.Entity<CachedData>()
                 .HasKey(c => c.Id);
 
@@ -65,7 +64,6 @@ namespace MediaBridge.Database
                 .HasIndex(c => c.ExpiresAt);
 
             // MediaRequestLog configuration
-
             modelBuilder.Entity<MediaRequestLog>()
                 .HasKey(m => m.Id);
 
@@ -83,7 +81,6 @@ namespace MediaBridge.Database
 
             modelBuilder.Entity<MediaRequestLog>()
                 .HasIndex(m => m.MediaType);
-
         }
     }
 }
