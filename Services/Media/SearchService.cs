@@ -137,7 +137,7 @@ namespace MediaBridge.Services.Media
                         Title = search.Title ?? string.Empty,
                         Poster = (string?)dynamicInfo.Poster,
                         ImdbId = search.Ids.Imdbid,
-                        TmbId = search.Ids.TmbId,
+                        TmdbId = search.Ids.TmdbId,
                         ReleaseYear = (int?)dynamicInfo.Year,
                         Description = (string?)dynamicInfo.Description,
                         Runtime = runtime,
