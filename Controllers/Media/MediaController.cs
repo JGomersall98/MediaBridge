@@ -22,21 +22,14 @@ namespace MediaBridge.Controllers.Media
         // POST : /api/download
         [HttpPost]
         [Authorize(Roles = "Admin,Maintainer,User")]
-        public async Task<IActionResult> Post([FromQuery] int tmbId, string mediaType)
+        public async Task<IActionResult> Post([FromQuery] int tmbId, string mediaType, [FromBody] int[]? seasonsRequested)
         {
             StandardResponse response = new StandardResponse();
 
             var userId = User.GetUserId();
             var username = User.GetUsername();
 
-            if (mediaType.ToLower() == "movie")
-            {
-                response = await _mediaService.DownloadMovie(tmbId, userId, username);
-            }
-            else
-            {
-                response = new StandardResponse { Reason = "Invalid media type." };
-            }
+            response = await _mediaService.DownloadMedia(tmbId, userId, username, seasonsRequested, mediaType);
 
             return Ok(response);
         }

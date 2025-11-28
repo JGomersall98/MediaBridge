@@ -5,7 +5,7 @@
         public int Id { get; set; }
         public int UserId { get; set; }
         public required string Username { get; set; }
-        public int TmdbId { get; set; }
+        public int? TmdbId { get; set; }
         public required string MediaType { get; set; }
         public required string MediaTitle { get; set; }
         public bool IsSuccessful { get; set; }
