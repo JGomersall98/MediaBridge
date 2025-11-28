@@ -8,7 +8,7 @@ namespace MediaBridge.Services.Helpers
     public interface IHttpClientService
     {
         Task<string> GetStringAsync(string url);
-        Task<string> PostStringAsync(string url, string jsonBody);
+        Task<HttpResponseString> PostStringAsync(string url, string jsonBody);
     }
     public class HttpClientService : IHttpClientService
     {
@@ -43,8 +43,9 @@ namespace MediaBridge.Services.Helpers
                 throw;
             }
         }
-        public async Task<string> PostStringAsync(string url, string jsonBody)
+        public async Task<HttpResponseString> PostStringAsync(string url, string jsonBody)
         {
+            HttpResponseString postResponse = new HttpResponseString();
             try
             {
                 _logger.LogInformation("POST string request to: {Url}", url);
@@ -52,15 +53,10 @@ namespace MediaBridge.Services.Helpers
                 var content = new StringContent(jsonBody, System.Text.Encoding.UTF8, "application/json");
 
                 var response = await _httpClient.PostAsync(url, content);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    var jsonContent = await response.Content.ReadAsStringAsync();
-                    return jsonContent;
-                }
-
-                _logger.LogWarning("POST request failed. Status: {StatusCode}, Url: {Url}", response.StatusCode, url);
-                return "POST request failed.";
+                postResponse.IsSuccess = response.IsSuccessStatusCode;
+ 
+                postResponse.Response = await response.Content.ReadAsStringAsync();
+                return postResponse;
             }
             catch (Exception ex)
             {
@@ -68,5 +64,10 @@ namespace MediaBridge.Services.Helpers
                 throw;
             }
         }
+    }
+    public class HttpResponseString
+    {
+        public string Response { get; set; } = string.Empty;
+        public bool IsSuccess { get; set; }
     }
 }
