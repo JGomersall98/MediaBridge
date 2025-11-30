@@ -16,12 +16,14 @@ namespace MediaBridge.Database
         public DbSet<Config> Configs { get; set; }
         public DbSet<CachedData> CachedData { get; set; }
         public DbSet<MediaRequestLog> MediaRequestLogs { get; set; }
+        public DbSet<DownloadRequests> DownloadRequests { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<CachedData>().ToTable("cached_data");
             modelBuilder.Entity<MediaRequestLog>().ToTable("media_request_logs");
-            
+            modelBuilder.Entity<DownloadRequests>().ToTable("download_requests");
+
             // User configuration
             modelBuilder.Entity<User>()
                 .HasKey(u => u.Id);
@@ -81,6 +83,16 @@ namespace MediaBridge.Database
 
             modelBuilder.Entity<MediaRequestLog>()
                 .HasIndex(m => m.MediaType);
+
+            // DownloadRequests configuration
+            modelBuilder.Entity<DownloadRequests>()
+                .HasKey(d => d.Id);
+
+            modelBuilder.Entity<DownloadRequests>()
+                .HasOne(d => d.User)
+                .WithMany()
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
         }
     }
 }
