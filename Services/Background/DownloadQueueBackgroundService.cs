@@ -29,6 +29,8 @@ namespace MediaBridge.Services.Background
                     .GetRequiredService<IDownloadProcessorService>();
 
                     await downloadProcessorService.ProcessSonarrQueue();
+                    await downloadProcessorService.ProcessRadarrQueue();
+
                 }
                 catch (Exception ex)
                 {

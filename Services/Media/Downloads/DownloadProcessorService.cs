@@ -1,4 +1,5 @@
-﻿using System.Text.Json.Serialization;
+﻿using System;
+using System.Text.Json.Serialization;
 using MediaBridge.Database;
 using MediaBridge.Database.DB_Models;
 using MediaBridge.Services.Helpers;
@@ -12,6 +13,7 @@ namespace MediaBridge.Services.Media.Downloads
         private readonly IGetConfig _config;
         private readonly IHttpClientService _httpClientService;
         private string? _sonarrApiKey;
+        private string? _radarrApiKey;
 
         public DownloadProcessorService(MediaBridgeDbContext db, IGetConfig config, IHttpClientService httpClientService)
         {
@@ -19,17 +21,101 @@ namespace MediaBridge.Services.Media.Downloads
             _config = config;
             _httpClientService = httpClientService;
         }
+        public async Task ProcessRadarrQueue()
+        {
+            try
+            {
+                bool hasActiveDownloads = await _db.DownloadRequests
+                    .AnyAsync(dr => (dr.MediaType == "movie") &&
+                    (dr.Status == "queued" || dr.Status == "downloading"));
 
+                if (!hasActiveDownloads)
+                {
+                    Console.WriteLine("No active movie downloads found in database. Skipping Radarr queue check.");
+                    return;
+                }
+
+                string queueApiUrl = await BuildRadarrQueueUrl();
+                string queueResponse = await _httpClientService.GetStringAsync(queueApiUrl);
+                RadarrQueueResponse queueData = System.Text.Json.JsonSerializer.Deserialize<RadarrQueueResponse>(queueResponse)!;
+
+                if (queueData?.Records == null || !queueData.Records.Any())
+                {
+                    Console.WriteLine("No items found in Radarr queue.");
+                    return;
+                }
+
+                Console.WriteLine($"Found {queueData.Records.Count} items in Radarr queue.");
+
+                await ProcessRadarrQueueItems(queueData.Records);
+
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error processing Radarr queue: {ex.Message}");
+            }
+        }
+        public async Task ProcessRadarrQueueItems(List<RadarrQueueRecord> queueRecords)
+        {
+            // Implementation for processing Radarr queue items would go here
+            foreach (var record in queueRecords)
+            {
+                string movieDataUrl = await BuildRadarrMovieDataEndpoint(record.MovieId!.Value);
+                string movieResponse = await _httpClientService.GetStringAsync(movieDataUrl);
+                RadarrMovieId radarrMovieId = System.Text.Json.JsonSerializer.Deserialize<RadarrMovieId>(movieResponse)!;
+
+                var downloadRequest = await _db.DownloadRequests
+                    .Where(dr => dr.MediaType == "movie" && dr.TmdbId == radarrMovieId.TmbdId)
+                    .FirstOrDefaultAsync();
+                
+                if (downloadRequest == null)
+                {
+                    Console.WriteLine("No download request found for movie.");
+                    continue;
+                }
+
+                // Calculate download percentage
+                int downloadPercentage = GetDownloadPercentage(record.Size, record.SizeLeft);      
+                Console.WriteLine($"Download percentage for movie {record.MovieId}: {downloadPercentage}%");
+
+                // Parse time left
+                int? minutesLeft = GetMinutesLeft(record.Size, record.SizeLeft, record.TimeLeft);
+                Console.WriteLine($"Estimated time left for movie {record.MovieId}: {minutesLeft} minutes");
+
+                // Update the download request
+                downloadRequest.Status = GetDownloadStatus(record.Status);
+                downloadRequest.DownloadPercentage = downloadPercentage;
+                downloadRequest.MinutesLeft = minutesLeft;
+                downloadRequest.UpdatedAt = DateTime.UtcNow;
+
+                if (downloadRequest.Status == "completed" && !downloadRequest.CompletedAt.HasValue)
+                {
+                    downloadRequest.CompletedAt = DateTime.UtcNow;
+                }
+
+                Console.WriteLine($"Updated movie {downloadRequest.Title}: {downloadPercentage}% - {downloadRequest.Status}");
+            }
+            await _db.SaveChangesAsync();
+        }
+        private async Task<string> BuildRadarrMovieDataEndpoint(int movieId)
+        {
+            string baseUrl = await _config.GetConfigValueAsync("radarr_movie_data_endpoint");
+            await SetRadarrApiKeyAsync();
+            string apiUrl = baseUrl!.Replace("{movieId}", movieId.ToString());
+            return apiUrl + _radarrApiKey;
+        }
         public async Task ProcessSonarrQueue()
         {
             try
             {
                 bool hasActiveDownloads = await _db.DownloadRequests
-                             .AnyAsync(dr => dr.Status == "queued" || dr.Status == "downloading");
+                     .AnyAsync(dr => (dr.MediaType == "show" || dr.MediaType == "Episode") && 
+                     (dr.Status == "queued" || dr.Status == "downloading"));
+
 
                 if (!hasActiveDownloads)
                 {
-                    Console.WriteLine("No active downloads found in database. Skipping queue check.");
+                    Console.WriteLine("No active shows downloads found in database.Skipping sonarr queue check.");
                     return;
                 }
 
@@ -45,7 +131,7 @@ namespace MediaBridge.Services.Media.Downloads
 
                 Console.WriteLine($"Found {queueData.Records.Count} items in Sonarr queue.");
 
-                await ProcessQueueItems(queueData.Records);
+                await ProcessSonarrQueueItems(queueData.Records);
             }
             catch (Exception ex)
             {
@@ -53,7 +139,7 @@ namespace MediaBridge.Services.Media.Downloads
             }
         }
 
-        private async Task ProcessQueueItems(List<SonarrQueueRecord> queueRecords)
+        private async Task ProcessSonarrQueueItems(List<SonarrQueueRecord> queueRecords)
         {
             // Group by series to minimize API calls
             var seriesGroups = queueRecords
@@ -73,7 +159,7 @@ namespace MediaBridge.Services.Media.Downloads
                     .ToListAsync();
 
                 // Update existing downloads with current progress
-                await UpdateExistingDownloads(existingDownloads, episodesInQueue);
+                await UpdateExistingSonarrDownloads(existingDownloads, episodesInQueue);
 
                 // Find missing episodes that need to be added
                 var missingEpisodeIds = episodeIds
@@ -95,8 +181,34 @@ namespace MediaBridge.Services.Media.Downloads
 
             await _db.SaveChangesAsync();
         }
+        private int GetDownloadPercentage(long? size, long? sizeLeft)
+        {
+            if (size.HasValue && size.Value > 0)
+            {
+                long downloaded = size.Value - (sizeLeft ?? 0);
+                return (int)((double)downloaded / size.Value * 100);
+            }
+            return 0;
+        }
+        private int GetMinutesLeft(long? size, long? sizeLeft, string? timeLeft)
+        {
+            if (size.HasValue && size.Value > 0)
+            {
+                long downloaded = size.Value - (sizeLeft ?? 0);
+                double progress = (double)downloaded / size.Value;
+                if (progress > 0 && !string.IsNullOrEmpty(timeLeft))
+                {
+                    int? parsedMinutes = ParseTimeLeftToMinutes(timeLeft);
+                    if (parsedMinutes.HasValue)
+                    {
+                        return (int)(parsedMinutes.Value / progress);
+                    }
+                }
+            }
+            return 0;
+        }
 
-        private async Task UpdateExistingDownloads(List<DownloadRequests> existingDownloads, List<SonarrQueueRecord> queueItems)
+        private async Task UpdateExistingSonarrDownloads(List<DownloadRequests> existingDownloads, List<SonarrQueueRecord> queueItems)
         {
             foreach (var download in existingDownloads)
             {
@@ -104,20 +216,20 @@ namespace MediaBridge.Services.Media.Downloads
                 if (queueItem != null)
                 {
                     // Calculate download percentage
-                    int downloadPercentage = 0;
-                    int? minutesLeft = null;
+                    int downloadPercentage = GetDownloadPercentage(queueItem.Size, queueItem.SizeLeft);
+                    int? minutesLeft = GetMinutesLeft(queueItem.Size, queueItem.SizeLeft, queueItem.TimeLeft);
 
-                    if (queueItem.Size.HasValue && queueItem.Size > 0)
-                    {
-                        long downloaded = queueItem.Size.Value - (queueItem.SizeLeft ?? 0);
-                        downloadPercentage = (int)((double)downloaded / queueItem.Size.Value * 100);
-                    }
+                    //if (queueItem.Size.HasValue && queueItem.Size > 0)
+                    //{
+                    //    long downloaded = queueItem.Size.Value - (queueItem.SizeLeft ?? 0);
+                    //    downloadPercentage = (int)((double)downloaded / queueItem.Size.Value * 100);
+                    //}
 
-                    // Parse time left
-                    if (!string.IsNullOrEmpty(queueItem.TimeLeft))
-                    {
-                        minutesLeft = ParseTimeLeftToMinutes(queueItem.TimeLeft);
-                    }
+                    //// Parse time left
+                    //if (!string.IsNullOrEmpty(queueItem.TimeLeft))
+                    //{
+                    //    minutesLeft = ParseTimeLeftToMinutes(queueItem.TimeLeft);
+                    //}
 
                     // Update the download request
                     download.Status = GetDownloadStatus(queueItem.Status);
@@ -355,9 +467,9 @@ namespace MediaBridge.Services.Media.Downloads
             return null;
         }
 
-        private string GetDownloadStatus(string? sonarrStatus)
+        private string GetDownloadStatus(string? status)
         {
-            return sonarrStatus?.ToLower() switch
+            return status?.ToLower() switch
             {
                 "downloading" => "downloading",
                 "queued" => "queued",
@@ -365,6 +477,7 @@ namespace MediaBridge.Services.Media.Downloads
                 "completed" => "completed",
                 "failed" => "failed",
                 "importpending" => "importing",
+                "warning" => "warning",
                 _ => "queued"
             };
         }
@@ -389,7 +502,6 @@ namespace MediaBridge.Services.Media.Downloads
             await SetSonarrApiKeyAsync();
             return baseUrl!.Replace("{ApiKey}", _sonarrApiKey!).Replace("{seriesId}", seriesId);
         }
-
         private async Task SetSonarrApiKeyAsync()
         {
             if (string.IsNullOrEmpty(_sonarrApiKey))
@@ -402,6 +514,28 @@ namespace MediaBridge.Services.Media.Downloads
                 _sonarrApiKey = apiKey;
             }
         }
+        private async Task<string> BuildRadarrQueueUrl()
+        {
+            string baseUrl = await _config.GetConfigValueAsync("radarr_download_queue_endpoint");
+
+            await SetRadarrApiKeyAsync();
+
+            string apiUrl = baseUrl!.Replace("{ApiKey}", _radarrApiKey!);
+
+            return apiUrl;
+        }
+        private async Task SetRadarrApiKeyAsync()
+        {
+            if (string.IsNullOrEmpty(_radarrApiKey))
+            {
+                var apiKey = await _config.GetConfigValueAsync("radarr_api_key");
+                if (string.IsNullOrEmpty(apiKey))
+                {
+                    throw new InvalidOperationException("radarr_api_key not found in configuration.");
+                }
+                _radarrApiKey = apiKey;
+            }
+        }
     }
 
     public class SonarrQueueResponse
@@ -409,7 +543,6 @@ namespace MediaBridge.Services.Media.Downloads
         [JsonPropertyName("records")]
         public List<SonarrQueueRecord>? Records { get; set; }
     }
-
     public class SonarrQueueRecord
     {
         [JsonPropertyName("seriesId")]
@@ -430,7 +563,6 @@ namespace MediaBridge.Services.Media.Downloads
         [JsonPropertyName("status")]
         public string? Status { get; set; }
     }
-
     public class SonarrEpisode
     {
         [JsonPropertyName("id")]
@@ -448,11 +580,41 @@ namespace MediaBridge.Services.Media.Downloads
         [JsonPropertyName("airDate")]
         public string? AirDate { get; set; }
     }
-
     public class SonarrSeries
     {
         [JsonPropertyName("tvdbId")]
         public int TvdbId { get; set; }
+    }
+    public class RadarrQueueResponse
+    {
+        [JsonPropertyName("records")]
+        public List<RadarrQueueRecord>? Records { get; set; }
+    }
+
+    public class RadarrQueueRecord
+    {
+        [JsonPropertyName("movieId")]
+        public int? MovieId { get; set; }
+
+        [JsonPropertyName("title")]
+        public string? Title { get; set; }
+
+        [JsonPropertyName("status")]
+        public string? Status { get; set; }
+        
+        [JsonPropertyName("size")]
+        public long? Size { get; set; }
+        
+        [JsonPropertyName("sizeleft")]
+        public long? SizeLeft { get; set; }
+
+        [JsonPropertyName("timeleft")]
+        public string? TimeLeft { get; set; }
+    }
+    public class RadarrMovieId
+    {
+        [JsonPropertyName("tmdbId")]
+        public int TmbdId { get; set; }
     }
 }
 

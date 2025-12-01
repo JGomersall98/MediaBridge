@@ -3,5 +3,6 @@
     public interface IDownloadProcessorService
     {
         Task ProcessSonarrQueue();
+        Task ProcessRadarrQueue();
     }
 }

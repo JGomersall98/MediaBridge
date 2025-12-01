@@ -75,7 +75,7 @@ namespace MediaBridge.Services.Media
                 Description = media.Description,
                 PosterUrl = media.PosterUrl,
                 ReleaseYear = media.ReleaseYear,
-                Status = "Queued",
+                Status = "queued",
                 DownloadPercentage = 0,
                 RequestedAt = DateTime.UtcNow
             };
