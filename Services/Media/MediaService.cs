@@ -1,12 +1,9 @@
 ﻿using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Threading;
-using System.Threading.Tasks;
 using MediaBridge.Database;
 using MediaBridge.Database.DB_Models;
 using MediaBridge.Models;
 using MediaBridge.Services.Helpers;
-using Microsoft.AspNetCore.WebUtilities;
 
 namespace MediaBridge.Services.Media
 {
@@ -32,13 +29,13 @@ namespace MediaBridge.Services.Media
         {
             StandardResponse response = new StandardResponse();
 
-            RSGetMediaResponse movieDetails = await GetMediaDetails(tmbId, mediaType);
+            RSGetMediaResponse mediaDetails = await GetMediaDetails(tmbId, mediaType);
 
             HttpResponseString requestResponse = new HttpResponseString();
 
             if (mediaType == "movie")
             {
-                requestResponse = await SendMovieRequest(movieDetails);
+                requestResponse = await SendMovieRequest(mediaDetails);
             }
             else if (mediaType == "show")
             {
@@ -48,21 +45,44 @@ namespace MediaBridge.Services.Media
                     response.IsSuccess = false;
                     return response;
                 }
-                requestResponse = await SendShowRequest(movieDetails, seasonsRequested);
+                requestResponse = await SendShowRequest(mediaDetails, seasonsRequested);
             }
 
             if (!requestResponse.IsSuccess)
             {
-                response = await ErrorResponse(userId, username, tmbId, mediaType, movieDetails.Title!, requestResponse.Response);
+                response = await ErrorResponse(userId, username, tmbId, mediaType, mediaDetails.Title!, requestResponse.Response);
                 return response;
             }
 
             response.IsSuccess = true;
 
-            await LogMediaRequest(userId, username, tmbId, mediaType, movieDetails.Title!, true, null);
+            await LogMediaRequest(userId, username, tmbId, mediaType, mediaDetails.Title!, true, null);
+            await AddToDownloadRequests(mediaDetails, mediaType, userId);
 
             return response;
         }      
+
+        private async Task AddToDownloadRequests(RSGetMediaResponse media, string mediaType, int userId)
+        {
+            DownloadRequests downloadRequest = new DownloadRequests
+            {
+                MediaId = media.MediaId,
+                TmdbId = media.TmdbId,
+                TvdbId = media.TvdbId,
+                UserId = userId,
+                MediaType = mediaType,
+                Title = media.Title,
+                Description = media.Description,
+                PosterUrl = media.PosterUrl,
+                ReleaseYear = media.ReleaseYear,
+                Status = "queued",
+                DownloadPercentage = 0,
+                RequestedAt = DateTime.UtcNow
+            };
+
+            _db.DownloadRequests.Add(downloadRequest);
+            await _db.SaveChangesAsync();
+        }
         private async Task<StandardResponse> ErrorResponse(int userId, string username, int tmbId, string mediaType, string mediaTitle, string responseString)
         {
             StandardResponse response = new StandardResponse();
@@ -207,8 +227,12 @@ namespace MediaBridge.Services.Media
     }
     public class RSGetMediaResponse
     {
+        [JsonPropertyName("id")]
+        public int MediaId { get; set; }
         [JsonPropertyName("title")]
         public string? Title { get; set; }
+        [JsonPropertyName("overview")]
+        public string? Description { get; set; }
         [JsonPropertyName("tmdbId")]
         public int? TmdbId { get; set; } // Movie
         [JsonPropertyName("tvdbId")]
@@ -217,6 +241,10 @@ namespace MediaBridge.Services.Media
         public string? ImdbId { get; set; }
         [JsonPropertyName("titleSlug")]
         public string? TitleSlug { get; set; }
+        [JsonPropertyName("remotePoster")]
+        public string? PosterUrl { get; set; }
+        [JsonPropertyName("year")]
+        public int? ReleaseYear { get; set; }
     }
     public class RadarrAddMovieRequest
     {
