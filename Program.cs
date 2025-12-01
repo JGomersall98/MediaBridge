@@ -1,18 +1,20 @@
+using System.IO;
 using System.Security.Claims;
 using System.Text;
 using MediaBridge.Database;
 using MediaBridge.Models.Authentication;
 using MediaBridge.Services.Admin;
 using MediaBridge.Services.Authentication;
+using MediaBridge.Services.Background;
 using MediaBridge.Services.Dashboard;
 using MediaBridge.Services.Helpers;
 using MediaBridge.Services.Media;
+using MediaBridge.Services.Media.Downloads;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
-using System.IO;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -64,15 +66,22 @@ builder.Services.AddHealthChecks()
     .AddCheck("self", () => HealthCheckResult.Healthy("Application is running"))
     .AddDbContextCheck<MediaBridgeDbContext>("database", failureStatus: HealthStatus.Degraded);
 
+// Services
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddScoped<IMediaService, MediaService>();
+builder.Services.AddScoped<IDownloadProcessorService, DownloadProcessorService>();
 builder.Services.AddTransient<ICaching, Caching>();
 builder.Services.AddTransient<IHttpClientService, HttpClientService>();
 builder.Services.AddTransient<IGetConfig, GetConfig>();
+
+// Background Services
+builder.Services.AddHostedService<DownloadQueueBackgroundService>();
+
+// HttpClient
 builder.Services.AddHttpClient();
 
 var app = builder.Build();
