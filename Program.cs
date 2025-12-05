@@ -74,6 +74,8 @@ builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddScoped<IMediaService, MediaService>();
 builder.Services.AddScoped<IDownloadProcessorService, DownloadProcessorService>();
+builder.Services.AddScoped<IRequestDownloadStatusService, RequestDownloadStatusService>();
+
 builder.Services.AddTransient<ICaching, Caching>();
 builder.Services.AddTransient<IHttpClientService, HttpClientService>();
 builder.Services.AddTransient<IGetConfig, GetConfig>();
