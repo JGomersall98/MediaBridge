@@ -26,8 +26,8 @@ namespace MediaBridge.Controllers.Media
         {
             StandardResponse response = new StandardResponse();
 
-            var userId = User.GetUserId();
-            var username = User.GetUsername();
+            int userId = User.GetUserId();
+            string username = User.GetUsername();
 
             response = await _mediaService.DownloadMedia(tmbId, userId, username, seasonsRequested, mediaType);
 
