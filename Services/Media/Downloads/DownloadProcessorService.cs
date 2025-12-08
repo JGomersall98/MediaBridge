@@ -87,6 +87,7 @@ namespace MediaBridge.Services.Media.Downloads
                 downloadRequest.DownloadPercentage = downloadPercentage;
                 downloadRequest.MinutesLeft = minutesLeft;
                 downloadRequest.UpdatedAt = DateTime.UtcNow;
+                downloadRequest.MediaId = record.MovieId;
 
                 if (downloadRequest.Status == "completed" && !downloadRequest.CompletedAt.HasValue)
                 {
@@ -95,6 +96,70 @@ namespace MediaBridge.Services.Media.Downloads
 
                 Console.WriteLine($"Updated movie {downloadRequest.Title}: {downloadPercentage}% - {downloadRequest.Status}");
             }
+            await _db.SaveChangesAsync();
+        }
+        public async Task ProcessStuckMedia()
+        {
+            List<DownloadRequests> stuckMovies = await _db.DownloadRequests
+                .Where(dr => dr.MediaType == "movie" && dr.Status == "downloading" &&
+                dr.UpdatedAt <= DateTime.UtcNow.AddMinutes(-2))
+                .ToListAsync();
+
+            if (stuckMovies.Any())
+            {
+                foreach (var movie in stuckMovies)
+                {
+                    movie.Status = "completed";
+                    movie.DownloadPercentage = 100;
+                    movie.MinutesLeft = 0;
+                    movie.CompletedAt = DateTime.UtcNow;
+                    movie.UpdatedAt = DateTime.UtcNow;
+                    Console.WriteLine($"Marked movie '{movie.Title}' as completed due to inactivity.");
+                }
+            }
+
+            // Get stuck episodes 
+            List<DownloadRequests> stuckEpisodes = await _db.DownloadRequests
+                .Where(dr => dr.MediaType == "Episode" && dr.Status == "downloading" &&
+                dr.UpdatedAt <= DateTime.UtcNow.AddMinutes(-2))
+                .ToListAsync();
+            
+            if (stuckEpisodes.Any())
+            {
+                foreach (var episode in stuckEpisodes)
+                {
+                    episode.Status = "completed";
+                    episode.DownloadPercentage = 100;
+                    episode.MinutesLeft = 0;
+                    episode.CompletedAt = DateTime.UtcNow;
+                    episode.UpdatedAt = DateTime.UtcNow;
+                    Console.WriteLine($"Marked episode '{episode.Title}' as completed due to inactivity.");
+                }
+            }
+
+            List<DownloadRequests> downloadingShows = await _db.DownloadRequests
+                .Where(dr => (dr.MediaType == "show") && dr.Status == "downloading")
+                .ToListAsync();
+
+            foreach (var show in downloadingShows)
+            {
+                List<DownloadRequests> showEpisodes = await _db.DownloadRequests
+                    .Where(dr => dr.MediaType == "Episode" && dr.MediaId == show.MediaId)
+                    .ToListAsync();
+
+                bool allEpisodesCompleted = showEpisodes.All(e => e.Status == "completed");
+
+                if (allEpisodesCompleted)
+                {
+                    show.Status = "completed";
+                    show.DownloadPercentage = 100;
+                    show.MinutesLeft = 0;
+                    show.CompletedAt = DateTime.UtcNow;
+                    show.UpdatedAt = DateTime.UtcNow;
+                    Console.WriteLine($"Marked show '{show.Title}' as completed since all episodes are completed.");
+                }
+            }
+
             await _db.SaveChangesAsync();
         }
         private async Task<string> BuildRadarrMovieDataEndpoint(int movieId)
@@ -138,7 +203,6 @@ namespace MediaBridge.Services.Media.Downloads
                 Console.WriteLine($"Error processing Sonarr queue: {ex.Message}");
             }
         }
-
         private async Task ProcessSonarrQueueItems(List<SonarrQueueRecord> queueRecords)
         {
             // Group by series to minimize API calls
@@ -207,7 +271,6 @@ namespace MediaBridge.Services.Media.Downloads
             }
             return 0;
         }
-
         private async Task UpdateExistingSonarrDownloads(List<DownloadRequests> existingDownloads, List<SonarrQueueRecord> queueItems)
         {
             foreach (var download in existingDownloads)
@@ -246,7 +309,6 @@ namespace MediaBridge.Services.Media.Downloads
                 }
             }
         }
-
         private async Task AddMissingEpisodes(int seriesId, List<SonarrQueueRecord> missingQueueItems)
         {
             try
@@ -352,7 +414,6 @@ namespace MediaBridge.Services.Media.Downloads
                 Console.WriteLine($"Error adding missing episodes for series {seriesId}: {ex.Message}");
             }
         }
-
         private async Task UpdateParentSeriesProgress(int seriesId)
         {
             try
@@ -429,7 +490,6 @@ namespace MediaBridge.Services.Media.Downloads
                 Console.WriteLine($"Error updating parent series progress for seriesId {seriesId}: {ex.Message}");
             }
         }
-
         private int? ParseTimeLeftToMinutes(string timeLeft)
         {
             try
@@ -466,7 +526,6 @@ namespace MediaBridge.Services.Media.Downloads
 
             return null;
         }
-
         private string GetDownloadStatus(string? status)
         {
             return status?.ToLower() switch
@@ -481,21 +540,18 @@ namespace MediaBridge.Services.Media.Downloads
                 _ => "queued"
             };
         }
-
         private async Task<string> BuildSonarrQueueUrl()
         {
             string baseUrl = await _config.GetConfigValueAsync("sonarr_download_queue_endpoint");
             await SetSonarrApiKeyAsync();
             return baseUrl!.Replace("{ApiKey}", _sonarrApiKey!);
         }
-
         private async Task<string> BuildSonarrSeriesDataUrl(string seriesId)
         {
             string baseUrl = await _config.GetConfigValueAsync("sonarr_series_data_endpoint");
             await SetSonarrApiKeyAsync();
             return baseUrl!.Replace("{ApiKey}", _sonarrApiKey!).Replace("{seriesId}", seriesId);
         }
-
         private async Task<string> BuildSonarrEpisodeDataUrl(string seriesId)
         {
             string baseUrl = await _config.GetConfigValueAsync("sonarr_episode_data_endpoint");

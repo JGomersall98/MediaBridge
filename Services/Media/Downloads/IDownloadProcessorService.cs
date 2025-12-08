@@ -4,5 +4,6 @@
     {
         Task ProcessSonarrQueue();
         Task ProcessRadarrQueue();
+        Task ProcessStuckMedia();
     }
 }
