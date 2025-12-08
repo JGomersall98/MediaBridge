@@ -27,5 +27,14 @@ namespace MediaBridge.Controllers.Media
             var response = await _requestDownloadStatusService.GetDownloadRequestsStatus(userId);
             return Ok(response);
         }
+        // GET : /api/downloadrequests/all
+        [HttpGet]
+        [Route("all")]
+        [Authorize(Roles = "Admin,Maintainer")]
+        public async Task<ActionResult<DownloadRequestsResponse>> GetAllRequestsAsync()
+        {
+            var response = await _requestDownloadStatusService.GetAllDownloadRequests();
+            return Ok(response);
+        }
     }
 }

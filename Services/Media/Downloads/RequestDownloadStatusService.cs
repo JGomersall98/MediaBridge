@@ -12,6 +12,52 @@ namespace MediaBridge.Services.Media.Downloads
         {
             _db = db;
         }
+        public async Task<DownloadRequestsResponse> GetAllDownloadRequests()
+        {
+            DownloadRequestsResponse downloadRequestsResponse = new DownloadRequestsResponse();
+
+            DateTime sixMonthsAgo = DateTime.UtcNow.AddMonths(-6);
+
+            List<DownloadRequests> downloadRequests =
+                await _db.DownloadRequests
+                    .Where(dr => dr.RequestedAt >= sixMonthsAgo)
+                    .ToListAsync();
+
+            if (downloadRequests == null || downloadRequests.Count == 0)
+            {
+                downloadRequestsResponse.IsSuccess = false;
+                downloadRequestsResponse.Reason = "No download requests found.";
+                return downloadRequestsResponse;
+            }
+
+            List<MediaRequestStatus> requests = new List<MediaRequestStatus>();
+            foreach (var request in downloadRequests)
+            {
+                if (request.MediaType == "movie")
+                {
+                    MediaRequestStatus movieRequestStatus = BuildMovieMediaRequestStatus(request);
+                    movieRequestStatus.RequestedByUserId = request.UserId;
+                    movieRequestStatus.RequestedByUsername = await GetUsernameById(request.UserId);
+                    requests.Add(movieRequestStatus);
+                }
+                else if (request.MediaType == "show")
+                {
+                    int? tvdvId = request.TvdbId;
+
+                    List<DownloadRequests> episodeRequests = downloadRequests
+                        .Where(dr => dr.TvdbId == tvdvId && dr.EpisodeId != null)
+                        .ToList();
+
+                    MediaRequestStatus showRequestStatus = BuildShowMediaRequestStatus(request, episodeRequests);
+                    showRequestStatus.RequestedByUserId = request.UserId;
+                    showRequestStatus.RequestedByUsername = await GetUsernameById(request.UserId);
+                    requests.Add(showRequestStatus);
+                }
+            }
+            downloadRequestsResponse.IsSuccess = true;
+            downloadRequestsResponse.Requests = requests;
+            return downloadRequestsResponse;
+        }
         public async Task<DownloadRequestsResponse> GetDownloadRequestsStatus(int userId)
         {
             DownloadRequestsResponse downloadRequestsResponse = new DownloadRequestsResponse();
@@ -111,6 +157,15 @@ namespace MediaBridge.Services.Media.Downloads
                 mediaRequestStatus.EpisodesStatus = episodesStatus;
             }
             return mediaRequestStatus;
+        }
+        private async Task<string> GetUsernameById(int userId)
+        {
+            var user = await _db.Users.FindAsync(userId);
+            if (user == null)
+            {                 
+                return "Unknown User";
+            }
+            return user.Username;
         }
     }
 }

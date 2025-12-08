@@ -14,6 +14,8 @@
         public DateTime? CompletedAt { get; set; }
         public int? MinutesLeft { get; set; }
         public List<ShowEpisodesStatus>? EpisodesStatus { get; set; }
+        public int? RequestedByUserId { get; set; }
+        public string? RequestedByUsername { get; set; }
 
     }
     public class ShowEpisodesStatus

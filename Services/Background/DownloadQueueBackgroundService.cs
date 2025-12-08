@@ -1,3 +1,6 @@
+using System.Runtime.CompilerServices;
+using MediaBridge.Database;
+using MediaBridge.Database.DB_Models;
 using MediaBridge.Services.Media.Downloads;
 
 namespace MediaBridge.Services.Background
@@ -6,7 +9,7 @@ namespace MediaBridge.Services.Background
     {
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<DownloadQueueBackgroundService> _logger;
-        private readonly TimeSpan _period = TimeSpan.FromSeconds(30);
+        private readonly TimeSpan _period = TimeSpan.FromSeconds(15);
 
         public DownloadQueueBackgroundService(
             IServiceProvider serviceProvider,
@@ -30,7 +33,7 @@ namespace MediaBridge.Services.Background
 
                     await downloadProcessorService.ProcessSonarrQueue();
                     await downloadProcessorService.ProcessRadarrQueue();
-
+                    await downloadProcessorService.ProcessStuckMedia();
                 }
                 catch (Exception ex)
                 {
