@@ -1,8 +1,10 @@
 ﻿using System.Text.Json;
+using System.Text.Json.Serialization;
 using MediaBridge.Database;
 using MediaBridge.Database.DB_Models;
 using MediaBridge.Models.Dashboard;
 using MediaBridge.Services.Helpers;
+using MediaBridge.Services.Media;
 using Microsoft.EntityFrameworkCore;
 
 namespace MediaBridge.Services.Dashboard
@@ -19,6 +21,7 @@ namespace MediaBridge.Services.Dashboard
         private const string TVSHOWS_CACHE_KEY = "top_tvshows";
         private const string MOVIES_ENDPOINT_KEY = "mdblist_movies_endpoint";
         private const string TVSHOWS_ENDPOINT_KEY = "mdblist_tvshows_endpoint";
+        private const string MEDIA_TMBDID_INFO = "media_tmbd_id_endpoint";
         private readonly JsonSerializerOptions _jsonOptions;
 
         public DashboardService(MediaBridgeDbContext db, ILogger<DashboardService> logger, 
@@ -47,13 +50,6 @@ namespace MediaBridge.Services.Dashboard
                 {
                     return BuildDashboardMoviesResponse(cachedData, true);
                 }
-                string apiUrl = await _config.GetConfigValueAsync(MOVIES_ENDPOINT_KEY);
-                var freshData = await FetchMediaFromApiAsync(apiUrl);
-                if (freshData != null)
-                {
-                    await _caching.CacheDataAsync(MOVIES_CACHE_KEY, JsonSerializer.Serialize(freshData, _jsonOptions), CACHE_DURATION_HOURS);
-                    return BuildDashboardMoviesResponse(freshData, false);
-                }
 
                 response.IsSuccess = false;
                 response.Reason = "Failed to fetch movie data";
@@ -63,11 +59,10 @@ namespace MediaBridge.Services.Dashboard
             {
                 _logger.LogError(ex, "Error getting top movies");
                 response.IsSuccess = false;
-                response.Reason = "Internal server error";
+                response.Reason = "Movie cache failed";
                 return response;
             }
         }
-
         public async Task<DashboardTvShowsResponse> GetTopTvShowsAsync()
         {
             try
@@ -77,17 +72,6 @@ namespace MediaBridge.Services.Dashboard
                 if (cachedData != null)
                 {
                     return BuildDashboardTvShowsResponse(cachedData, true);
-                }
-
-                string apiUrl = await _config.GetConfigValueAsync(TVSHOWS_ENDPOINT_KEY);
-
-                var freshData = await FetchMediaFromApiAsync(apiUrl);
-                if (freshData != null)
-                {
-                    string jsonData = JsonSerializer.Serialize(freshData, _jsonOptions);
-                    await _caching.CacheDataAsync(TVSHOWS_CACHE_KEY, jsonData, CACHE_DURATION_HOURS);
-
-                    return BuildDashboardTvShowsResponse(freshData, false);
                 }
 
                 var response = new DashboardTvShowsResponse();
@@ -100,50 +84,125 @@ namespace MediaBridge.Services.Dashboard
                 _logger.LogError(ex, "Error getting top TV shows");
                 var response = new DashboardTvShowsResponse();
                 response.IsSuccess = false;
-                response.Reason = "Internal server error";
+                response.Reason = "Tv show cache failed";
                 return response;
             }
         }
-        public async Task<bool> RefreshMovieCacheAsync()
-        {
-            try
-            {
-                string apiUrl = await _config.GetConfigValueAsync(MOVIES_ENDPOINT_KEY);
-                var freshData = await FetchMediaFromApiAsync(apiUrl);
-                if (freshData != null)
-                {
-                    string jsonData = JsonSerializer.Serialize(freshData, _jsonOptions);
-                    await _caching.CacheDataAsync(MOVIES_CACHE_KEY, jsonData, CACHE_DURATION_HOURS);
-                    return true;
-                }
-                return false;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error refreshing movie cache");
-                return false;
-            }
-        }
 
-        public async Task<bool> RefreshTvShowCacheAsync()
+
+        public async Task<MdbListApiResponse?> GetMoreTmdIdForMediaAsync(MdbListApiResponse mdbListApiResponse, string mediaType)
         {
-            var apiUrl = await _config.GetConfigValueAsync(TVSHOWS_ENDPOINT_KEY);
-            try
+            if (mediaType == "movie")
             {
-                var freshData = await FetchMediaFromApiAsync(apiUrl);
-                if (freshData != null)
+                List<MediaMovieInfo> mediaMovieInfos = await GetTmdIdForMovieAsync(mdbListApiResponse, mediaType);
+            }
+            else if (mediaType == "show")
+            {
+                List<MediaMovieInfo> mediaTvShowInfos = await GetTmdIdForTvShowAsync(mdbListApiResponse, mediaType);
+            }
+            else
+            {
+                _logger.LogError("Invalid media type specified for Tmdb ID retrieval.");
+                return mdbListApiResponse;
+            }
+
+            return mdbListApiResponse;
+        }
+        private async Task<List<MediaMovieInfo>> GetTmdIdForMovieAsync(MdbListApiResponse mdbListApiResponse, string mediaType)
+        {
+            // Get all the imdb from the movie items
+            List<string> imdbIds = mdbListApiResponse.Movies.Select(m => m.ImdbId!).Where(id => !string.IsNullOrEmpty(id)).Distinct().ToList();
+
+            // Prepare the request payload
+            var requestData = new { ids = imdbIds };
+
+            // Serialize the request payload to JSON
+            string jsonBody = JsonSerializer.Serialize(requestData, _jsonOptions);
+
+            string movieUrl = await BuildTmbdIdInfoEndpoint(mediaType);
+
+            // Make the POST request using the correct IHttpClientService method
+            var httpResponse = await _httpClientService.PostStringAsync(movieUrl, jsonBody);
+
+            // deserialize the response
+            List<MediaMovieInfo> mediaMovieInfos = JsonSerializer.Deserialize<List<MediaMovieInfo>>(httpResponse.Response, _jsonOptions);
+
+            if (mediaMovieInfos == null)
+            {
+                mediaMovieInfos = new List<MediaMovieInfo>();
+                return mediaMovieInfos;
+            }
+
+            // add the tmbid into the original movie items
+            foreach (var movie in mdbListApiResponse.Movies)
+            {
+                var info = mediaMovieInfos.FirstOrDefault(m => m.InfoIds!.ImdbId == movie.ImdbId);
+                if (info != null)
                 {
-                    string jsonData = JsonSerializer.Serialize(freshData, _jsonOptions);
-                    await _caching.CacheDataAsync(TVSHOWS_CACHE_KEY, jsonData, CACHE_DURATION_HOURS);
-                    return true;
+                    movie.TmdbId = info.InfoIds!.TmdbId;
                 }
-                return false;
             }
-            catch (Exception ex)
+            Console.WriteLine("Completed fetching Tmdb IDs for movies.");
+            return mediaMovieInfos;
+        }
+        private async Task<List<MediaMovieInfo>> GetTmdIdForTvShowAsync(MdbListApiResponse mdbListApiResponse, string mediaType)
+        {
+            // Get all the imdb from the tv show items
+            List<string> imdbIds = mdbListApiResponse.Shows.Select(m => m.ImdbId!).Where(id => !string.IsNullOrEmpty(id)).Distinct().ToList();
+            
+            // Prepare the request payload
+            var requestData = new { ids = imdbIds };
+            
+            // Serialize the request payload to JSON
+            string jsonBody = JsonSerializer.Serialize(requestData, _jsonOptions);
+            string tvUrl = await BuildTmbdIdInfoEndpoint(mediaType);
+            
+            // Make the POST request using the correct IHttpClientService method
+            var httpResponse = await _httpClientService.PostStringAsync(tvUrl, jsonBody);
+            
+            // deserialize the response
+            List<MediaMovieInfo> mediaMovieInfos = JsonSerializer.Deserialize<List<MediaMovieInfo>>(httpResponse.Response, _jsonOptions);
+            
+            if (mediaMovieInfos == null)
             {
-                _logger.LogError(ex, "Error refreshing TV show cache");
-                return false;
+                mediaMovieInfos = new List<MediaMovieInfo>();
+                return mediaMovieInfos;
             }
+
+            // add the tmbid into the original tv show items
+            foreach (var show in mdbListApiResponse.Shows)
+            {
+                var info = mediaMovieInfos.FirstOrDefault(m => m.InfoIds!.ImdbId == show.ImdbId);
+                if (info != null)
+                {
+                    show.TmdbId = info.InfoIds!.TmdbId;
+                }
+            }
+
+            Console.WriteLine("Completed fetching Tmdb IDs for TV shows.");
+            return mediaMovieInfos;
+        }
+        private async Task<string> BuildTmbdIdInfoEndpoint(string mediaType)
+        {
+            string apiUrl = await _config.GetConfigValueAsync(MEDIA_TMBDID_INFO);
+
+            if (string.IsNullOrEmpty(apiUrl))
+            {
+                _logger.LogError("MDBList media TMBD ID endpoint is not configured.");
+                return string.Empty;
+            }
+
+            var apiKey = await _config.GetConfigValueAsync("mdblist_api_key");
+
+            if(mediaType == "movie")
+            {
+                apiUrl = apiUrl.Replace("{mediaType}", mediaType) + apiKey;
+            }
+            else if(mediaType == "show")
+            {
+                apiUrl = apiUrl.Replace("{mediaType}", mediaType) + apiKey;
+            }
+            return apiUrl;
         }
         private DashboardTvShowsResponse BuildDashboardTvShowsResponse(object data, bool isCachedResponse)
         {
@@ -168,7 +227,6 @@ namespace MediaBridge.Services.Dashboard
             response.IsSuccess = true;
             return response;
         }
-
         private DashboardMoviesResponse BuildDashboardMoviesResponse(object data, bool isCachedResponse)
         {
             DashboardMoviesResponse response = new DashboardMoviesResponse();
@@ -192,8 +250,7 @@ namespace MediaBridge.Services.Dashboard
             response.IsSuccess = true;
             return response;
         }
-
-        private async Task<MdbListApiResponse?> FetchMediaFromApiAsync(string? apiUrl)
+        private async Task<MdbListApiResponse?> FetchMediaFromApiAsync(string? apiUrl, string mediaType)
         {
             var apiKey = await _config.GetConfigValueAsync("mdblist_api_key");
 
@@ -206,8 +263,73 @@ namespace MediaBridge.Services.Dashboard
             var fullUrl = $"{apiUrl}{apiKey}";
 
             var httpResponse = await _httpClientService.GetStringAsync(fullUrl);
-            MdbListApiResponse response = JsonSerializer.Deserialize<MdbListApiResponse>(httpResponse, _jsonOptions);
+            var deserializedResponse = JsonSerializer.Deserialize<MdbListApiResponse>(httpResponse, _jsonOptions);
+            if (deserializedResponse == null)
+            {
+                _logger.LogError("Failed to deserialize MdbListApiResponse from API response.");
+                return null;
+            }
+            MdbListApiResponse response = await GetMoreTmdIdForMediaAsync(deserializedResponse, mediaType);
             return response;
         }
+
+
+
+        // Refresh cache methods called by a scheduled job
+        public async Task RefreshCaches()
+        {
+            await RefreshTopMoviesCacheAsync();
+
+            await RefreshTopShowsCacheAsync();
+
+        }
+        private async Task RefreshTopMoviesCacheAsync()
+        {
+            try
+            {
+                string apiUrl = await _config.GetConfigValueAsync(MOVIES_ENDPOINT_KEY);
+                var freshData = await FetchMediaFromApiAsync(apiUrl, "movie");
+                if (freshData != null)
+                {
+                    await _caching.CacheDataAsync(MOVIES_CACHE_KEY, JsonSerializer.Serialize(freshData, _jsonOptions), CACHE_DURATION_HOURS);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting top movies");
+            }
+        }
+        private async Task RefreshTopShowsCacheAsync()
+        {
+            try
+            {
+                string apiUrl = await _config.GetConfigValueAsync(TVSHOWS_ENDPOINT_KEY);
+
+                var freshData = await FetchMediaFromApiAsync(apiUrl, "show");
+                if (freshData != null)
+                {
+                    string jsonData = JsonSerializer.Serialize(freshData, _jsonOptions);
+                    await _caching.CacheDataAsync(TVSHOWS_CACHE_KEY, jsonData, CACHE_DURATION_HOURS);
+
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting top TV shows");
+            }
+        }
+    }
+    public class GetImdbDataResposne
+    {
+        [JsonPropertyName("ids")]
+        public List<GetImdbDataResposneIds> Ids { get; set; }
+
+    }
+    public class GetImdbDataResposneIds
+    {
+        [JsonPropertyName("imdb")]
+        public string ImdbId { get; set; }
+        [JsonPropertyName("tmdb")]
+        public int TmdbId { get; set; }
     }
 }

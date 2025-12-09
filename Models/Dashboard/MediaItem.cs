@@ -1,4 +1,6 @@
-﻿namespace MediaBridge.Models.Dashboard
+﻿using System.Text.Json.Serialization;
+
+namespace MediaBridge.Models.Dashboard
 {
     public class MediaItem
     {
@@ -6,6 +8,7 @@
         public List<string>? Genre { get; set; }
         public string Title { get; set; } = string.Empty;
         public string? Poster { get; set; }
+        [JsonPropertyName("imdb_id")]
         public string? ImdbId { get; set; }
         public int? ReleaseYear { get; set; }
         public string? Description { get; set; } = "";

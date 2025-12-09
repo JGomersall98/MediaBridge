@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using MediaBridge.Database;
 using MediaBridge.Database.DB_Models;
+using MediaBridge.Services.Dashboard;
 using MediaBridge.Services.Media.Downloads;
 
 namespace MediaBridge.Services.Background
@@ -10,6 +11,8 @@ namespace MediaBridge.Services.Background
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<DownloadQueueBackgroundService> _logger;
         private readonly TimeSpan _period = TimeSpan.FromSeconds(15);
+        private readonly TimeSpan _sixHourPeriod = TimeSpan.FromHours(11);
+        private DateTime _lastSixHourRun = DateTime.MinValue;
 
         public DownloadQueueBackgroundService(
             IServiceProvider serviceProvider,
@@ -22,6 +25,9 @@ namespace MediaBridge.Services.Background
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             _logger.LogInformation("Download Queue Background Service starting.");
+
+            // Start the 6-hour timer task
+            var sixHourTask = RunSixHourTimerAsync(stoppingToken);
 
             while (!stoppingToken.IsCancellationRequested)
             {
@@ -50,7 +56,43 @@ namespace MediaBridge.Services.Background
                 }
             }
 
+            // Wait for the 6-hour task to complete
+            try
+            {
+                await sixHourTask;
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when cancellation is requested
+            }
+
             _logger.LogInformation("Download Queue Background Service stopping.");
+        }
+
+        private async Task RunSixHourTimerAsync(CancellationToken stoppingToken)
+        {
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                try
+                {
+                    _logger.LogInformation("Running 11-hour maintenance task...");
+
+                    using var scope = _serviceProvider.CreateScope();
+                    var dashboardService = scope.ServiceProvider.GetRequiredService<IDashboardService>();
+                    await dashboardService.RefreshCaches();
+
+                    _logger.LogInformation("6-hour maintenance task completed.");
+                    await Task.Delay(_sixHourPeriod, stoppingToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error occurred during 11-hour maintenance task.");
+                }
+            }
         }
     }
 }

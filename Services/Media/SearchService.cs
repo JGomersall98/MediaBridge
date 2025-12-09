@@ -278,6 +278,10 @@ namespace MediaBridge.Services.Media
     {
         [JsonPropertyName("trakt")]
         public int TraktId { get; set; }
+        [JsonPropertyName("imdb")]
+        public string? ImdbId { get; set; }
+        [JsonPropertyName("tmdb")]
+        public int TmdbId { get; set; }
     }
     public class Genre
     {
