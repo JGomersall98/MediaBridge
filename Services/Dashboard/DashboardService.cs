@@ -157,53 +157,7 @@ namespace MediaBridge.Services.Dashboard
             Console.WriteLine("Completed fetching Tmdb IDs for movies.");
             return mediaMovieInfos;
         }
-        //private async Task<List<MediaMovieInfo>> GetTmdIdForTvShowAsync(MdbListApiResponse mdbListApiResponse, string mediaType)
-        //{
-        //    // Get all the imdb from the tv show items
-        //    List<string> imdbIds = mdbListApiResponse.Shows.Select(m => m.ImdbId!).Where(id => !string.IsNullOrEmpty(id)).Distinct().ToList();
 
-        //    string response = await _searchService.GetMediaInfo(imdbIds, mediaType, "imdb");
-
-        //    var showInfoList = JsonSerializer.Deserialize<List<MediaShowInfo>>(response, _jsonOptions);
-        //    mediaItems = _searchService.BuildMediaItemList(showInfoList, showInfoList);
-
-        //    return new List<MediaMovieInfo>();
-
-        //    //// Prepare the request payload
-        //    //var requestData = new { ids = imdbIds };
-
-        //    //// Serialize the request payload to JSON
-        //    //string jsonBody = JsonSerializer.Serialize(requestData, _jsonOptions);
-        //    //string tvUrl = await BuildTmbdIdInfoEndpoint(mediaType);
-
-        //    //// Make the POST request using the correct IHttpClientService method
-        //    //var httpResponse = await _httpClientService.PostStringAsync(tvUrl, jsonBody);
-
-        //    //// deserialize the response
-        //    //List<MediaMovieInfo> mediaMovieInfos = JsonSerializer.Deserialize<List<MediaMovieInfo>>(httpResponse.Response, _jsonOptions);
-
-        //    //if (mediaMovieInfos == null)
-        //    //{
-        //    //    mediaMovieInfos = new List<MediaMovieInfo>();
-        //    //    return mediaMovieInfos;
-        //    //}
-
-        //    //// add the tmbid into the original tv show items
-        //    //foreach (var show in mdbListApiResponse.Shows)
-        //    //{
-        //    //    var info = mediaMovieInfos.FirstOrDefault(m => m.InfoIds!.ImdbId == show.ImdbId);
-        //    //    if (info != null)
-        //    //    {
-        //    //        show.TmdbId = info.InfoIds!.TmdbId;
-        //    //        show.ImbdRating = GetImdbRatingFromRatingsList(mediaMovieInfos, info);
-        //    //        show.Description = info.Description;
-        //    //        show.ReleaseDateString = info.ReleaseDateString;
-        //    //    }
-        //    //}
-
-        //    //Console.WriteLine("Completed fetching Tmdb IDs for TV shows.");
-        //    //return mediaMovieInfos;
-        //}
         private async Task GetTmdIdForTvShowAsync(MdbListApiResponse mdbListApiResponse, string mediaType)
         {
             // Get all the imdb from the tv show items
@@ -355,11 +309,19 @@ namespace MediaBridge.Services.Dashboard
                 var tvData = JsonSerializer.Deserialize<MdbListApiResponse>(cachedData.JsonData, _jsonOptions);
                 if (tvData != null)
                 {
+                    // Filter out shows with null seasons and sort by season count (highest first)
+                    response.Shows = tvData.Shows
+                        .Where(show => show.Seasons != null && show.Seasons.Any())
+                        .ToList();
                     response.LastUpdated = cachedData.CachedAt;
                 }
             }
             else if (!isCachedResponse && data is MdbListApiResponse freshData)
             {
+                // Filter out shows with null seasons and sort by season count (highest first)
+                response.Shows = freshData.Shows
+                    .Where(show => show.Seasons != null && show.Seasons.Any())
+                    .ToList();
                 response.LastUpdated = DateTime.UtcNow;
             }
 
