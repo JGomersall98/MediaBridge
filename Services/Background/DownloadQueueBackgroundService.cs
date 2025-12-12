@@ -40,6 +40,7 @@ namespace MediaBridge.Services.Background
                     await downloadProcessorService.ProcessSonarrQueue();
                     await downloadProcessorService.ProcessRadarrQueue();
                     await downloadProcessorService.ProcessStuckMedia();
+                    await downloadProcessorService.ScrapeRadarrMovies();
                 }
                 catch (Exception ex)
                 {
@@ -78,6 +79,10 @@ namespace MediaBridge.Services.Background
                     _logger.LogInformation("Running 11-hour maintenance task...");
 
                     using var scope = _serviceProvider.CreateScope();
+                    var downloadProcessorService = scope.ServiceProvider
+                        .GetRequiredService<IDownloadProcessorService>();
+                    await downloadProcessorService.ScrapeRadarrMovies();
+
                     var dashboardService = scope.ServiceProvider.GetRequiredService<IDashboardService>();
                     await dashboardService.RefreshCaches();
 

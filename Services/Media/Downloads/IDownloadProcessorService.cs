@@ -5,5 +5,6 @@
         Task ProcessSonarrQueue();
         Task ProcessRadarrQueue();
         Task ProcessStuckMedia();
+        Task ScrapeRadarrMovies();
     }
 }
