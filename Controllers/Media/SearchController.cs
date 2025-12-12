@@ -25,7 +25,7 @@ namespace MediaBridge.Controllers.Media
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
             var usernameClaim = User.FindFirst(ClaimTypes.Name);
 
-            var response = await _searchFunction.MdbListMovieSearch(mediaType, query);
+            var response = await _searchFunction.MdbListMediaSearch(mediaType, query);
             return Ok(response);
         }
     }

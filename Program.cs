@@ -76,6 +76,7 @@ builder.Services.AddScoped<IMediaService, MediaService>();
 builder.Services.AddScoped<IDownloadProcessorService, DownloadProcessorService>();
 builder.Services.AddScoped<IRequestDownloadStatusService, RequestDownloadStatusService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
+builder.Services.AddTransient<IUtilService, UtilService>();
 
 builder.Services.AddTransient<ICaching, Caching>();
 builder.Services.AddTransient<IHttpClientService, HttpClientService>();

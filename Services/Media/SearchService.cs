@@ -12,10 +12,12 @@ namespace MediaBridge.Services.Media
         private readonly IGetConfig _config;
         private readonly IHttpClientService _httpClientService;
         private readonly JsonSerializerOptions _jsonOptions;
+        private readonly IUtilService _utilService;
         private string? _apiKey;
         private const string SEARCH_ENDPOINT_KEY = "mdblist_search_endpont";
         private const string INFO_ENDPOINT_KEY = "mdblist_info_endpoint";
-        public SearchService(IGetConfig config, IHttpClientService httpClientService)
+
+        public SearchService(IGetConfig config, IHttpClientService httpClientService, IUtilService utilService)
         {
             _config = config;
             _httpClientService = httpClientService;
@@ -23,9 +25,10 @@ namespace MediaBridge.Services.Media
             {
                 PropertyNameCaseInsensitive = true
             };
+            _utilService = utilService;
         }
 
-        public async Task<MdbListMediaSearchResponse> MdbListMovieSearch(string media, string query)
+        public async Task<MdbListMediaSearchResponse> MdbListMediaSearch(string media, string query)
         {
             MdbListMediaSearchResponse response = new MdbListMediaSearchResponse();
 
@@ -45,7 +48,7 @@ namespace MediaBridge.Services.Media
                 return response;
             }
 
-            string mediaInfoResponse = await GetMediaInfo(traktIds, media);
+            string mediaInfoResponse = await GetMediaInfo(traktIds, media, "trakt");
 
             List<MediaItem> mediaItems;
 
@@ -75,7 +78,7 @@ namespace MediaBridge.Services.Media
             response.IsSuccess = true;
             return response;
         }
-        private List<MediaItem> BuildMediaItemList<T>(MbListSearchResult searchResult, List<T>? infoList) where T : class
+        public List<MediaItem> BuildMediaItemList<T>(MbListSearchResult searchResult, List<T>? infoList)
         {
             var mediaItems = new List<MediaItem>();
 
@@ -127,9 +130,20 @@ namespace MediaBridge.Services.Media
                     var runTimeValue = GetPropertyValue(dynamicInfo, "RunTime") as int?;
                     if (runTimeValue.HasValue)
                     {
-                        runtime = CalculateRunTimeHours(runTimeValue);
+                        runtime = _utilService.CalculateRunTimeHours(runTimeValue);
                     }
-                    
+
+                    // Get rating value from MediaMovieInfo where source is "imdb"
+                    double imbdRating = 0;
+                    foreach (var rating in dynamicInfo.Ratings)
+                    {
+                        if (rating.Source == "imdb")
+                        {
+                            imbdRating = rating.Value;
+                            break; // Exit loop once we find the IMDB rating
+                        }
+                    }
+
                     var mediaItem = new MediaItem
                     {
                         Id = (int)dynamicInfo.Id,
@@ -141,7 +155,8 @@ namespace MediaBridge.Services.Media
                         ReleaseYear = (int?)dynamicInfo.Year,
                         Description = (string?)dynamicInfo.Description,
                         Runtime = runtime,
-                        Seasons = mediaSeasonItems
+                        Seasons = mediaSeasonItems,
+                        ImbdRating = imbdRating
                     };
                     mediaItems.Add(mediaItem);
                 }
@@ -153,27 +168,10 @@ namespace MediaBridge.Services.Media
         {
             return obj.GetType().GetProperty(propertyName)?.GetValue(obj);
         }
-        private string CalculateRunTimeHours(int? runtime)
-        {
-            if (runtime.HasValue)
-            {
-                int hours = (int)(runtime / 60);
-                int hoursToRemove = hours * 60;
-                int minutesLeft = (int)runtime - hoursToRemove;
-
-                string runtimeString = hours + "h " + minutesLeft + "m";
-                return runtimeString;
-            }
-            else
-            {
-                return "";
-            }
-                
-        }
-        private async Task<string> GetMediaInfo(List<int> traktIds, string mediaType)
+        public async Task<string> GetMediaInfo<T>(List<T> ids, string mediaType, string idkey)
         {
             MbdListMovieInfoResponse mbdListInfoResponse = new MbdListMovieInfoResponse();
-            
+
             // Get Endpoint
             string configUrl = await _config.GetConfigValueAsync(INFO_ENDPOINT_KEY);
 
@@ -183,7 +181,8 @@ namespace MediaBridge.Services.Media
             }
 
             string apiUrl = configUrl
-                .Replace("{mediaType}", mediaType);
+                .Replace("{mediaType}", mediaType)
+                .Replace("{idKey}", idkey);
 
             if (string.IsNullOrEmpty(_apiKey))
             {
@@ -194,7 +193,7 @@ namespace MediaBridge.Services.Media
 
             string payload = JsonSerializer.Serialize(new
             {
-                ids = traktIds,
+                ids = ids,
             });
             HttpResponseString httpResponseString = await _httpClientService.PostStringAsync(fullUrl, payload);
             return httpResponseString.Response;
@@ -269,15 +268,30 @@ namespace MediaBridge.Services.Media
         public string? Poster { get; set; }
         public int? RunTime { get; set; }
         public int Year { get; set; }
+        [JsonPropertyName("released")]
+        public string? ReleaseDateString { get; set; }
         [JsonPropertyName("ids")]
         public InfoId? InfoIds { get; set; }
         [JsonPropertyName("description")]
         public string? Description { get; set; }
+        [JsonPropertyName("ratings")]
+        public List<Rating> Ratings { get; set; }
     }
     public class InfoId
     {
         [JsonPropertyName("trakt")]
         public int TraktId { get; set; }
+        [JsonPropertyName("imdb")]
+        public string? ImdbId { get; set; }
+        [JsonPropertyName("tmdb")]
+        public int TmdbId { get; set; }
+    }
+    public class Rating
+    {
+        [JsonPropertyName("source")]
+        public string Source { get; set; }
+        [JsonPropertyName("value")]
+        public double? Value { get; set; }
     }
     public class Genre
     {
@@ -298,7 +312,8 @@ namespace MediaBridge.Services.Media
         [JsonPropertyName("ids")]
         public InfoId? InfoIds { get; set; }
         public List<MediaShowInfoSeasons>? Seasons { get; set; }
-
+        [JsonPropertyName("ratings")]
+        public List<Rating> Ratings { get; set; } = new List<Rating>();
     }
     public class MediaShowInfoSeasons
     {

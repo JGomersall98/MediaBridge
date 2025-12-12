@@ -6,7 +6,6 @@ namespace MediaBridge.Services.Dashboard
     {
         Task<DashboardMoviesResponse> GetTopMoviesAsync();
         Task<DashboardTvShowsResponse> GetTopTvShowsAsync();
-        Task<bool> RefreshMovieCacheAsync();
-        Task<bool> RefreshTvShowCacheAsync();
+        Task RefreshCaches();
     }
 }

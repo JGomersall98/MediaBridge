@@ -1,4 +1,6 @@
-﻿namespace MediaBridge.Models.Dashboard
+﻿using System.Text.Json.Serialization;
+
+namespace MediaBridge.Models.Dashboard
 {
     public class MediaItem
     {
@@ -6,12 +8,16 @@
         public List<string>? Genre { get; set; }
         public string Title { get; set; } = string.Empty;
         public string? Poster { get; set; }
+        [JsonPropertyName("imdb_id")]
         public string? ImdbId { get; set; }
+        [JsonPropertyName("released")]
+        public string? ReleaseDateString { get; set; }
         public int? ReleaseYear { get; set; }
         public string? Description { get; set; } = "";
         public string? Runtime { get; set; }
         public List<MediaSeasonItem>? Seasons { get; set; }
         public int TmdbId { get; set; }
+        public double? ImbdRating { get; set; }
 
     }
     public class MediaSeasonItem

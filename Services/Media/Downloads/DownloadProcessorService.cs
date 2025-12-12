@@ -2,6 +2,7 @@
 using System.Text.Json.Serialization;
 using MediaBridge.Database;
 using MediaBridge.Database.DB_Models;
+using MediaBridge.Models.Radarr;
 using MediaBridge.Services.Helpers;
 using Microsoft.EntityFrameworkCore;
 
@@ -202,6 +203,50 @@ namespace MediaBridge.Services.Media.Downloads
             {
                 Console.WriteLine($"Error processing Sonarr queue: {ex.Message}");
             }
+        }
+        public async Task ScrapeRadarrMovies()
+        {
+            string apiUrl = await BuildScrapeRadarrMoviesEndpoint();
+            string response = await _httpClientService.GetStringAsync(apiUrl);
+
+            List<RadarrMovieDetailList> movieDetails = System.Text.Json.JsonSerializer.Deserialize<List<RadarrMovieDetailList>>(response)!;
+
+            // Prepare all new movie entities first
+            var newDownloadedMovies = new List<DownloadedMovies>();
+
+            foreach (var movie in movieDetails)
+            {
+                DownloadedMovies downloadedMovie = new DownloadedMovies
+                {
+                    Id = movie.Id,
+                    Title = movie.Title ?? string.Empty,
+                    Description = movie.Description,
+                    HasFile = movie.HasFile,
+                    DownloadedAt = movie.Added,
+                    ReleaseYear = movie.ReleaseYear,
+                    ImdbId = movie.ImdbId,
+                    TmdbId = movie.TmdbId,
+                    PosterPath = movie.Images?.FirstOrDefault()?.Url,
+                    SizeOnDiskGB = movie.SizeOnDisk > 0 ? Math.Round((double)movie.SizeOnDisk / (1024.0 * 1024.0 * 1024.0), 2) : 0.0,
+                    PhysicalPath = movie.Path ?? string.Empty,
+                    Monitored = movie.Monitored,
+                    Runtime = movie.Runtime,
+                    Added = DateTime.Now
+                };
+                newDownloadedMovies.Add(downloadedMovie);
+            }
+
+            // Clear existing movies and add new ones in quick succession
+            _db.DownloadedMovies.RemoveRange(_db.DownloadedMovies);
+            _db.DownloadedMovies.AddRange(newDownloadedMovies);
+
+            await _db.SaveChangesAsync();
+        }
+        private async Task<string> BuildScrapeRadarrMoviesEndpoint()
+        {
+            string baseUrl = await _config.GetConfigValueAsync("radarr_get_all_movies_endpoint");
+            await SetRadarrApiKeyAsync();
+            return baseUrl + _radarrApiKey!;
         }
         private async Task ProcessSonarrQueueItems(List<SonarrQueueRecord> queueRecords)
         {
