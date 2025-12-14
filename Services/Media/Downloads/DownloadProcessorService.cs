@@ -1,8 +1,10 @@
 ﻿using System;
+using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 using MediaBridge.Database;
 using MediaBridge.Database.DB_Models;
 using MediaBridge.Models.Radarr;
+using MediaBridge.Models.Sonarr;
 using MediaBridge.Services.Helpers;
 using Microsoft.EntityFrameworkCore;
 
@@ -204,6 +206,120 @@ namespace MediaBridge.Services.Media.Downloads
                 Console.WriteLine($"Error processing Sonarr queue: {ex.Message}");
             }
         }
+        public async Task ScrapeSonarrShows()
+        {
+            string apiUrl = await BuildScrapeSonarrShowsEndpoint();
+            string response = await _httpClientService.GetStringAsync(apiUrl);
+
+            List<SonarrShowsDetailList> showDetails = System.Text.Json.JsonSerializer.Deserialize<List<SonarrShowsDetailList>>(response)!;
+
+            List<DownloadedShows> showParentList = new List<DownloadedShows>();
+
+            foreach (var show in showDetails)
+            {
+                // amount of seasons equals count of seasons in show.Seasons, excluding season 0 (specials)
+                int amountOfSeasons = show.Seasons != null ? show.Seasons.Count(s => s.SeasonNumber != 0) : 0;
+                DownloadedShows showParent = new DownloadedShows()
+                {
+                    Title = show.Title!,
+                    Type = "show",
+                    Description = show.Description,
+                    AmountOfSeasons = amountOfSeasons,
+                    DownloadedAt = show.Added,
+                    ReleaseDate = show.FirstAired!.Value,
+                    ImdbId = show.ImdbId,
+                    TvdbId = show.TvdbId,
+                    PosterPath = show.Images?.FirstOrDefault()?.Url,
+                    SizeOnDiskGB = show.Statistics!.SizeOnDisk > 0 ? Math.Round((double)show.Statistics.SizeOnDisk / (1024.0 * 1024.0 * 1024.0), 2) : 0.0,
+                    PhysicalPath = show.Path!,
+                    Monitored = show.Monitored,
+                    Added = DateTime.Now
+                };
+                showParentList.Add(showParent);
+
+                if (show.Seasons == null || !show.Seasons.Any())
+                {
+                    continue;
+                }
+
+                List<DownloadedShows> seasonChildList = new List<DownloadedShows>();
+
+                foreach (var season in show.Seasons)
+                {
+                    if (season.SeasonNumber != 0)
+                    {
+                        DownloadedShows seasonChild = new DownloadedShows()
+                        {
+                            Title = show.Title + " S" + season.SeasonNumber,
+                            Type = "episode",
+                            HasFile = AllShowsInSeasonDownloaded(season),
+                            SeasonNumber = season.SeasonNumber,
+                            EpisodesInSeason = season.Statistics!.TotalEpisodeCount,
+                            EpisodesDownloaded = season.Statistics.EpisodeCount,
+                            ImdbId = show.ImdbId,
+                            TvdbId = show.TvdbId,
+                            SizeOnDiskGB = GetSizeOnDiskGB(season.Statistics.SizeOnDisk),
+                            Monitored = season.Monitored,
+                            Added = DateTime.Now
+                        };
+                        seasonChildList.Add(seasonChild);
+                    }
+                }
+
+                if (seasonChildList.Any(s => s.HasFile == false))
+                {
+                    showParent.HasFile = false;
+                }
+                else
+                {
+                    showParent.HasFile = true;
+
+                }
+                // add all seasons to parent show list
+                showParentList.AddRange(seasonChildList);
+            }
+            // add or update all shows and seasons in database
+            _db.DownloadedShows.RemoveRange(_db.DownloadedShows);
+            _db.DownloadedShows.AddRange(showParentList);
+            await _db.SaveChangesAsync();
+        }
+        private double GetSizeOnDiskGB(long sizeOnDisk)
+        {
+            return Math.Round((double)sizeOnDisk / (1024.0 * 1024.0 * 1024.0), 2);
+        }
+        private bool AllShowsInSeasonDownloaded(SonarrSeason season)
+        {
+            if (season.Statistics.SizeOnDisk == 0)
+            {
+                // No size on disk means nothing downloaded
+                return false;
+            }
+
+            if (season!.Statistics!.EpisodeCount > 1)
+            {
+                if(season.Statistics.EpisodeCount == season.Statistics.TotalEpisodeCount)
+                {
+                    // Total episodes in season are equal to episodes downloaded
+                    return true;
+                }
+                else
+                {
+                    // Episodes downloaded are not equal to the total episodes in season
+                    return false;
+                }
+            }
+            else
+            {
+                // Has 0 episodes in season
+                return false;
+            }
+        }
+        private async Task<string> BuildScrapeSonarrShowsEndpoint()
+        {
+            string baseUrl = await _config.GetConfigValueAsync("sonarr_get_all_shows_endpoint");
+            await SetSonarrApiKeyAsync();
+            return baseUrl + _sonarrApiKey!;
+        }
         public async Task ScrapeRadarrMovies()
         {
             string apiUrl = await BuildScrapeRadarrMoviesEndpoint();
@@ -326,18 +442,6 @@ namespace MediaBridge.Services.Media.Downloads
                     // Calculate download percentage
                     int downloadPercentage = GetDownloadPercentage(queueItem.Size, queueItem.SizeLeft);
                     int? minutesLeft = GetMinutesLeft(queueItem.Size, queueItem.SizeLeft, queueItem.TimeLeft);
-
-                    //if (queueItem.Size.HasValue && queueItem.Size > 0)
-                    //{
-                    //    long downloaded = queueItem.Size.Value - (queueItem.SizeLeft ?? 0);
-                    //    downloadPercentage = (int)((double)downloaded / queueItem.Size.Value * 100);
-                    //}
-
-                    //// Parse time left
-                    //if (!string.IsNullOrEmpty(queueItem.TimeLeft))
-                    //{
-                    //    minutesLeft = ParseTimeLeftToMinutes(queueItem.TimeLeft);
-                    //}
 
                     // Update the download request
                     download.Status = GetDownloadStatus(queueItem.Status);

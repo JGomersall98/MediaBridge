@@ -18,6 +18,7 @@ namespace MediaBridge.Database
         public DbSet<MediaRequestLog> MediaRequestLogs { get; set; }
         public DbSet<DownloadRequests> DownloadRequests { get; set; }
         public DbSet<DownloadedMovies> DownloadedMovies { get; set; }
+        public DbSet<DownloadedShows> DownloadedShows { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -25,6 +26,7 @@ namespace MediaBridge.Database
             modelBuilder.Entity<MediaRequestLog>().ToTable("media_request_logs");
             modelBuilder.Entity<DownloadRequests>().ToTable("download_requests");
             modelBuilder.Entity<DownloadedMovies>().ToTable("downloaded_movies");
+            modelBuilder.Entity<DownloadedShows>().ToTable("downloaded_shows");
 
             // User configuration
             modelBuilder.Entity<User>()
@@ -99,6 +101,10 @@ namespace MediaBridge.Database
             // DownloadedMovies configuration
             modelBuilder.Entity<DownloadedMovies>()
                 .HasKey(dm => dm.Id);
+
+            // DownloadedShows configuration
+            modelBuilder.Entity<DownloadedShows>()
+                .HasKey(ds => ds.Id);
         }
     }
 }

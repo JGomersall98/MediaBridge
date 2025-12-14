@@ -1,8 +1,11 @@
 ﻿using System.Text.Json;
 using System.Text.Json.Serialization;
+using MediaBridge.Database;
+using MediaBridge.Database.DB_Models;
 using MediaBridge.Models.Dashboard;
 using MediaBridge.Models.Search;
 using MediaBridge.Services.Helpers;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Services;
 
 namespace MediaBridge.Services.Media
@@ -13,11 +16,13 @@ namespace MediaBridge.Services.Media
         private readonly IHttpClientService _httpClientService;
         private readonly JsonSerializerOptions _jsonOptions;
         private readonly IUtilService _utilService;
+        private readonly MediaBridgeDbContext _db;
         private string? _apiKey;
         private const string SEARCH_ENDPOINT_KEY = "mdblist_search_endpont";
         private const string INFO_ENDPOINT_KEY = "mdblist_info_endpoint";
 
-        public SearchService(IGetConfig config, IHttpClientService httpClientService, IUtilService utilService)
+        public SearchService(IGetConfig config, IHttpClientService httpClientService, 
+            IUtilService utilService, MediaBridgeDbContext db)
         {
             _config = config;
             _httpClientService = httpClientService;
@@ -26,6 +31,7 @@ namespace MediaBridge.Services.Media
                 PropertyNameCaseInsensitive = true
             };
             _utilService = utilService;
+            _db = db;
         }
 
         public async Task<MdbListMediaSearchResponse> MdbListMediaSearch(string media, string query)
@@ -63,6 +69,7 @@ namespace MediaBridge.Services.Media
             {
                 var movieInfoList = JsonSerializer.Deserialize<List<MediaMovieInfo>>(mediaInfoResponse, _jsonOptions);
                 mediaItems = BuildMediaItemList(searchResult, movieInfoList);
+                mediaItems = await AlreadyExistingMovies(mediaItems);
             }
             else if (media == "show")
             {
@@ -77,6 +84,23 @@ namespace MediaBridge.Services.Media
             response.Media = mediaItems;
             response.IsSuccess = true;
             return response;
+        }
+        private async Task<List<MediaItem>> AlreadyExistingMovies(List<MediaItem> mediaItems)
+        {
+            List<DownloadedMovies> existingMovies = _db.DownloadedMovies.AsNoTracking().ToList();          
+
+            foreach (var movie in mediaItems)
+            {
+                if (existingMovies.Any(em => em.TmdbId == movie.TmdbId))
+                {
+                    movie.HasMedia = true;
+                }
+                else
+                {
+                    movie.HasMedia = false;
+                }
+            }
+            return mediaItems;
         }
         public List<MediaItem> BuildMediaItemList<T>(MbListSearchResult searchResult, List<T>? infoList)
         {
