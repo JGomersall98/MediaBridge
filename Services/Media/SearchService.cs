@@ -56,7 +56,7 @@ namespace MediaBridge.Services.Media
 
             string mediaInfoResponse = await GetMediaInfo(traktIds, media, "trakt");
 
-            List<MediaItem> mediaItems;
+            List<MediaItem> mediaItems = new List<MediaItem>();
 
             if (searchResult == null)
             {
@@ -69,17 +69,13 @@ namespace MediaBridge.Services.Media
             {
                 var movieInfoList = JsonSerializer.Deserialize<List<MediaMovieInfo>>(mediaInfoResponse, _jsonOptions);
                 mediaItems = BuildMediaItemList(searchResult, movieInfoList);
-                mediaItems = await AlreadyExistingMovies(mediaItems);
+                await AlreadyExistingMovies(mediaItems);
             }
             else if (media == "show")
             {
                 var showInfoList = JsonSerializer.Deserialize<List<MediaShowInfo>>(mediaInfoResponse, _jsonOptions);
                 mediaItems = BuildMediaItemList(searchResult, showInfoList);
-                mediaItems = await AlreadyExistingShows(mediaItems);
-            }
-            else
-            {
-                mediaItems = new List<MediaItem>();
+                await AlreadyExistingShows(mediaItems);
             }
 
             response.Media = mediaItems;
@@ -88,7 +84,7 @@ namespace MediaBridge.Services.Media
         }
         private async Task<List<MediaItem>> AlreadyExistingMovies(List<MediaItem> mediaItems)
         {
-            List<DownloadedMovies> existingMovies = _db.DownloadedMovies.AsNoTracking().ToList();          
+            List<DownloadedMovies> existingMovies = await _db.DownloadedMovies.AsNoTracking().ToListAsync();          
 
             foreach (var movie in mediaItems)
             {
@@ -105,13 +101,13 @@ namespace MediaBridge.Services.Media
         }
         private async Task<List<MediaItem>> AlreadyExistingShows(List<MediaItem> mediaItems)
         {
-            List<DownloadedShows> existingShows = _db.DownloadedShows.AsNoTracking().ToList();
+            List<DownloadedShows> existingShows = await _db.DownloadedShows.AsNoTracking().ToListAsync();
 
             foreach (var show in mediaItems)
             {
                 if(existingShows.Any(es => es.ImdbId == show.ImdbId))
                 {
-                    List<DownloadedShows> existingSeasons = _db.DownloadedShows
+                    List<DownloadedShows> existingSeasons = existingShows
                         .Where(es => es.ImdbId == show.ImdbId && es.Type == "season")
                         .ToList();
 
@@ -119,7 +115,7 @@ namespace MediaBridge.Services.Media
                     {
                         if(existingSeasons.Any(es => es.SeasonNumber == season.SeasonNumber))
                         {
-                            DownloadedShows existingSeason = _db.DownloadedShows
+                            DownloadedShows existingSeason = existingSeasons
                                 .Where(es => es.ImdbId == show.ImdbId && es.SeasonNumber == season.SeasonNumber)
                                 .FirstOrDefault();
 
@@ -131,7 +127,7 @@ namespace MediaBridge.Services.Media
                             else
                             {
                                 // Season exists but is not downloaded in full
-                                season.PartHasFile = true;
+                                season.HasPartFile = true;
                             }
                         }
                         else
@@ -155,7 +151,6 @@ namespace MediaBridge.Services.Media
                     show.HasMedia = false;
                 }
             }
-
             return mediaItems;
         }
         public List<MediaItem> BuildMediaItemList<T>(MbListSearchResult searchResult, List<T>? infoList)

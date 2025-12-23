@@ -29,7 +29,7 @@ namespace MediaBridge.Models.Dashboard
         public string? Title { get; set; }
         public string? AirDate { get; set; }
         public bool? HasFile { get; set; }
-        public bool? PartHasFile { get; set; }
+        public bool? HasPartFile { get; set; }
         
     }
 }
