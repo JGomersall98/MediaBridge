@@ -28,6 +28,8 @@ namespace MediaBridge.Models.Dashboard
         public int EpisodeCount { get; set; }
         public string? Title { get; set; }
         public string? AirDate { get; set; }
+        public bool? HasFile { get; set; }
+        public bool? PartHasFile { get; set; }
         
     }
 }

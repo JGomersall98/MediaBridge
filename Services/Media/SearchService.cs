@@ -75,6 +75,7 @@ namespace MediaBridge.Services.Media
             {
                 var showInfoList = JsonSerializer.Deserialize<List<MediaShowInfo>>(mediaInfoResponse, _jsonOptions);
                 mediaItems = BuildMediaItemList(searchResult, showInfoList);
+                mediaItems = await AlreadyExistingShows(mediaItems);
             }
             else
             {
@@ -100,6 +101,61 @@ namespace MediaBridge.Services.Media
                     movie.HasMedia = false;
                 }
             }
+            return mediaItems;
+        }
+        private async Task<List<MediaItem>> AlreadyExistingShows(List<MediaItem> mediaItems)
+        {
+            List<DownloadedShows> existingShows = _db.DownloadedShows.AsNoTracking().ToList();
+
+            foreach (var show in mediaItems)
+            {
+                if(existingShows.Any(es => es.ImdbId == show.ImdbId))
+                {
+                    List<DownloadedShows> existingSeasons = _db.DownloadedShows
+                        .Where(es => es.ImdbId == show.ImdbId && es.Type == "season")
+                        .ToList();
+
+                    foreach (var season in show.Seasons!)
+                    {
+                        if(existingSeasons.Any(es => es.SeasonNumber == season.SeasonNumber))
+                        {
+                            DownloadedShows existingSeason = _db.DownloadedShows
+                                .Where(es => es.ImdbId == show.ImdbId && es.SeasonNumber == season.SeasonNumber)
+                                .FirstOrDefault();
+
+                            if(existingSeason!.EpisodesDownloaded == existingSeason.EpisodesInSeason)
+                            {
+                                // Season is downloaded in full
+                                season.HasFile = true;
+                            }
+                            else
+                            {
+                                // Season exists but is not downloaded in full
+                                season.PartHasFile = true;
+                            }
+                        }
+                        else
+                        {
+                            // Season does not exist in the db
+                            season.HasFile = false;
+                        }
+                    }
+                }
+                // Mark HasMedia as true if all episodes of all non-special seasons are downloaded
+                if (show.Seasons != null)
+                {
+                    // Exclude season number 0 (Specials)
+                    var seasonsToCheck = show.Seasons.Where(s => s.SeasonNumber != 0).ToList();
+
+                    // If there are no non-special seasons, treat as not having full media
+                    show.HasMedia = seasonsToCheck.Any() && seasonsToCheck.All(s => s.HasFile == true);
+                }
+                else
+                {
+                    show.HasMedia = false;
+                }
+            }
+
             return mediaItems;
         }
         public List<MediaItem> BuildMediaItemList<T>(MbListSearchResult searchResult, List<T>? infoList)

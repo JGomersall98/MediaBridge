@@ -251,7 +251,7 @@ namespace MediaBridge.Services.Media.Downloads
                         DownloadedShows seasonChild = new DownloadedShows()
                         {
                             Title = show.Title + " S" + season.SeasonNumber,
-                            Type = "episode",
+                            Type = "season",
                             HasFile = AllShowsInSeasonDownloaded(season),
                             SeasonNumber = season.SeasonNumber,
                             EpisodesInSeason = season.Statistics!.TotalEpisodeCount,
