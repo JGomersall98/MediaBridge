@@ -105,7 +105,7 @@ namespace MediaBridge.Services.Media
 
             foreach (var show in mediaItems)
             {
-                if(existingShows.Any(es => es.ImdbId == show.ImdbId))
+                if (existingShows.Any(es => es.ImdbId == show.ImdbId))
                 {
                     List<DownloadedShows> existingSeasons = existingShows
                         .Where(es => es.ImdbId == show.ImdbId && es.Type == "season")
@@ -113,13 +113,13 @@ namespace MediaBridge.Services.Media
 
                     foreach (var season in show.Seasons!)
                     {
-                        if(existingSeasons.Any(es => es.SeasonNumber == season.SeasonNumber))
+                        if (existingSeasons.Any(es => es.SeasonNumber == season.SeasonNumber))
                         {
                             DownloadedShows existingSeason = existingSeasons
                                 .Where(es => es.ImdbId == show.ImdbId && es.SeasonNumber == season.SeasonNumber)
                                 .FirstOrDefault();
 
-                            if(existingSeason!.EpisodesDownloaded == existingSeason.EpisodesInSeason)
+                            if (existingSeason!.EpisodesDownloaded == existingSeason.EpisodesInSeason)
                             {
                                 // Season is downloaded in full
                                 season.HasFile = true;
@@ -137,6 +137,7 @@ namespace MediaBridge.Services.Media
                         }
                     }
                 }
+            
                 // Mark HasMedia as true if all episodes of all non-special seasons are downloaded
                 if (show.Seasons != null)
                 {
