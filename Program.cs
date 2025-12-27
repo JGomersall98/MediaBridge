@@ -16,14 +16,34 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
-
+using Serilog;
+using Serilog.Events;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Ensure console logging is enabled and set minimum level (Trace for full verbosity)
-builder.Logging.ClearProviders();
-builder.Logging.AddConsole();
-builder.Logging.SetMinimumLevel(LogLevel.Trace);
+// Configure Serilog
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Information)
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Infrastructure", LogEventLevel.Warning)
+    .WriteTo.Console()
+    .WriteTo.File("logs/application-.log",
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 7,
+        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {SourceContext} {Message:lj}{NewLine}{Exception}",
+        restrictedToMinimumLevel: LogEventLevel.Information)
+    .WriteTo.Logger(sqlLogger => sqlLogger
+    .Filter.ByIncludingOnly(evt => evt.Properties.ContainsKey("SourceContext") &&
+        evt.Properties["SourceContext"].ToString().Contains("Microsoft.EntityFrameworkCore"))
+    .WriteTo.File("logs/sql-.log",
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 7,
+        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}",
+        restrictedToMinimumLevel: LogEventLevel.Information))
+    .CreateLogger();
+
+// Clear default providers and use Serilog
+builder.Host.UseSerilog();
 
 // Add services to the container.
 IConfiguration configuration = builder.Configuration;
@@ -65,6 +85,8 @@ var connectionString = configuration.GetConnectionString("MediaBridgeDb");
 builder.Services.AddDbContext<MediaBridgeDbContext>(options =>
 {
     options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString));
+    // Enable SQL logging for Entity Framework
+    options.LogTo(Log.Logger.Information, LogLevel.Information);
 });
 
 // Health Checks
@@ -121,8 +143,12 @@ try
 }
 catch (Exception ex)
 {
-    Console.WriteLine("Error while attempting to apply migrations: " + ex);
+    Log.Fatal(ex, "Error while attempting to apply migrations");
     throw;
+}
+finally
+{
+    Log.CloseAndFlush();
 }
 
 // Configure the HTTP request pipeline.
@@ -139,4 +165,16 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-app.Run();
+try
+{
+    Log.Information("Starting MediaBridge application");
+    app.Run();
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Application terminated unexpectedly");
+}
+finally
+{
+    Log.CloseAndFlush();
+}
