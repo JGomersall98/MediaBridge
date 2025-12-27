@@ -18,6 +18,7 @@ namespace MediaBridge.Models.Dashboard
         public List<MediaSeasonItem>? Seasons { get; set; }
         public int TmdbId { get; set; }
         public double? ImbdRating { get; set; }
+        public bool? HasMedia { get; set; }
 
     }
     public class MediaSeasonItem
@@ -27,6 +28,8 @@ namespace MediaBridge.Models.Dashboard
         public int EpisodeCount { get; set; }
         public string? Title { get; set; }
         public string? AirDate { get; set; }
+        public bool? HasFile { get; set; }
+        public bool? HasPartFile { get; set; }
         
     }
 }

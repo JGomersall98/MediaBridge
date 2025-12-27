@@ -81,7 +81,8 @@ namespace MediaBridge.Services.Background
                     using var scope = _serviceProvider.CreateScope();
                     var downloadProcessorService = scope.ServiceProvider
                         .GetRequiredService<IDownloadProcessorService>();
-                    await downloadProcessorService.ScrapeRadarrMovies();
+                    //await downloadProcessorService.ScrapeRadarrMovies();
+                    await downloadProcessorService.ScrapeSonarrShows();
 
                     var dashboardService = scope.ServiceProvider.GetRequiredService<IDashboardService>();
                     await dashboardService.RefreshCaches();

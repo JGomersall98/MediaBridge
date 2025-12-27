@@ -1,8 +1,11 @@
 ﻿using System.Text.Json;
 using System.Text.Json.Serialization;
+using MediaBridge.Database;
+using MediaBridge.Database.DB_Models;
 using MediaBridge.Models.Dashboard;
 using MediaBridge.Models.Search;
 using MediaBridge.Services.Helpers;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Services;
 
 namespace MediaBridge.Services.Media
@@ -13,11 +16,13 @@ namespace MediaBridge.Services.Media
         private readonly IHttpClientService _httpClientService;
         private readonly JsonSerializerOptions _jsonOptions;
         private readonly IUtilService _utilService;
+        private readonly MediaBridgeDbContext _db;
         private string? _apiKey;
         private const string SEARCH_ENDPOINT_KEY = "mdblist_search_endpont";
         private const string INFO_ENDPOINT_KEY = "mdblist_info_endpoint";
 
-        public SearchService(IGetConfig config, IHttpClientService httpClientService, IUtilService utilService)
+        public SearchService(IGetConfig config, IHttpClientService httpClientService, 
+            IUtilService utilService, MediaBridgeDbContext db)
         {
             _config = config;
             _httpClientService = httpClientService;
@@ -26,6 +31,7 @@ namespace MediaBridge.Services.Media
                 PropertyNameCaseInsensitive = true
             };
             _utilService = utilService;
+            _db = db;
         }
 
         public async Task<MdbListMediaSearchResponse> MdbListMediaSearch(string media, string query)
@@ -50,7 +56,7 @@ namespace MediaBridge.Services.Media
 
             string mediaInfoResponse = await GetMediaInfo(traktIds, media, "trakt");
 
-            List<MediaItem> mediaItems;
+            List<MediaItem> mediaItems = new List<MediaItem>();
 
             if (searchResult == null)
             {
@@ -63,20 +69,89 @@ namespace MediaBridge.Services.Media
             {
                 var movieInfoList = JsonSerializer.Deserialize<List<MediaMovieInfo>>(mediaInfoResponse, _jsonOptions);
                 mediaItems = BuildMediaItemList(searchResult, movieInfoList);
+                await AlreadyExistingMovies(mediaItems);
             }
             else if (media == "show")
             {
                 var showInfoList = JsonSerializer.Deserialize<List<MediaShowInfo>>(mediaInfoResponse, _jsonOptions);
                 mediaItems = BuildMediaItemList(searchResult, showInfoList);
-            }
-            else
-            {
-                mediaItems = new List<MediaItem>();
+                await AlreadyExistingShows(mediaItems);
             }
 
             response.Media = mediaItems;
             response.IsSuccess = true;
             return response;
+        }
+        private async Task<List<MediaItem>> AlreadyExistingMovies(List<MediaItem> mediaItems)
+        {
+            List<DownloadedMovies> existingMovies = await _db.DownloadedMovies.AsNoTracking().ToListAsync();          
+
+            foreach (var movie in mediaItems)
+            {
+                if (existingMovies.Any(em => em.TmdbId == movie.TmdbId))
+                {
+                    movie.HasMedia = true;
+                }
+                else
+                {
+                    movie.HasMedia = false;
+                }
+            }
+            return mediaItems;
+        }
+        private async Task<List<MediaItem>> AlreadyExistingShows(List<MediaItem> mediaItems)
+        {
+            List<DownloadedShows> existingShows = await _db.DownloadedShows.AsNoTracking().ToListAsync();
+
+            foreach (var show in mediaItems)
+            {
+                if(existingShows.Any(es => es.ImdbId == show.ImdbId))
+                {
+                    List<DownloadedShows> existingSeasons = existingShows
+                        .Where(es => es.ImdbId == show.ImdbId && es.Type == "season")
+                        .ToList();
+
+                    foreach (var season in show.Seasons!)
+                    {
+                        if(existingSeasons.Any(es => es.SeasonNumber == season.SeasonNumber))
+                        {
+                            DownloadedShows existingSeason = existingSeasons
+                                .Where(es => es.ImdbId == show.ImdbId && es.SeasonNumber == season.SeasonNumber)
+                                .FirstOrDefault();
+
+                            if(existingSeason!.EpisodesDownloaded == existingSeason.EpisodesInSeason)
+                            {
+                                // Season is downloaded in full
+                                season.HasFile = true;
+                            }
+                            else
+                            {
+                                // Season exists but is not downloaded in full
+                                season.HasPartFile = true;
+                            }
+                        }
+                        else
+                        {
+                            // Season does not exist in the db
+                            season.HasFile = false;
+                        }
+                    }
+                }
+                // Mark HasMedia as true if all episodes of all non-special seasons are downloaded
+                if (show.Seasons != null)
+                {
+                    // Exclude season number 0 (Specials)
+                    var seasonsToCheck = show.Seasons.Where(s => s.SeasonNumber != 0).ToList();
+
+                    // If there are no non-special seasons, treat as not having full media
+                    show.HasMedia = seasonsToCheck.Any() && seasonsToCheck.All(s => s.HasFile == true);
+                }
+                else
+                {
+                    show.HasMedia = false;
+                }
+            }
+            return mediaItems;
         }
         public List<MediaItem> BuildMediaItemList<T>(MbListSearchResult searchResult, List<T>? infoList)
         {
