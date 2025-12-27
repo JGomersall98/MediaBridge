@@ -41,7 +41,16 @@ jobs:
         shell: powershell
         run: |
           robocopy "${env:PUBLISH_PATH}" "${env:DEPLOY_PATH}" /MIR /R:2 /W:2
-          if ($LASTEXITCODE -ge 8) { exit 1 }
+          $rc = $LASTEXITCODE
+      
+          # Robocopy exit codes < 8 are success
+          if ($rc -lt 8) {
+            Write-Host "Robocopy completed successfully with exit code $rc"
+            exit 0
+          } else {
+            Write-Error "Robocopy failed with exit code $rc"
+            exit 1
+          }
 
       - name: Start IIS
         shell: powershell
