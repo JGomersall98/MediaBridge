@@ -6,7 +6,7 @@ on:
 
 jobs:
   deploy:
-    runs-on: [iis-prod]
+    runs-on: self-hosted
 
     env:
       IIS_SITE_NAME: "MediaBridge"
