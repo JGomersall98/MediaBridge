@@ -13,11 +13,17 @@ using MediaBridge.Services.Media.Downloads;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Ensure console logging is enabled and set minimum level (Trace for full verbosity)
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.SetMinimumLevel(LogLevel.Trace);
 
 // Add services to the container.
 IConfiguration configuration = builder.Configuration;
