@@ -29,26 +29,26 @@ builder.Services.Configure<JwtOptions>(jwtSection);
 var key = Encoding.UTF8.GetBytes(jwtSection["Key"]!);
 
 builder.Services
-    .AddAuthentication(options =>
-    {
-        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-    })
-    .AddJwtBearer(options =>
-    {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = jwtSection["Issuer"],
-            ValidAudience = jwtSection["Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(key),
-            ClockSkew = TimeSpan.Zero,
-            RoleClaimType = ClaimTypes.Role
-        };
-    });
+ .AddAuthentication(options =>
+ {
+     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+     options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+ })
+ .AddJwtBearer(options =>
+ {
+     options.TokenValidationParameters = new TokenValidationParameters
+     {
+         ValidateIssuer = true,
+         ValidateAudience = true,
+         ValidateLifetime = true,
+         ValidateIssuerSigningKey = true,
+         ValidIssuer = jwtSection["Issuer"],
+         ValidAudience = jwtSection["Audience"],
+         IssuerSigningKey = new SymmetricSecurityKey(key),
+         ClockSkew = TimeSpan.Zero,
+         RoleClaimType = ClaimTypes.Role
+     };
+ });
 
 builder.Services.AddAuthorization();
 builder.Services.AddEndpointsApiExplorer();
@@ -63,8 +63,8 @@ builder.Services.AddDbContext<MediaBridgeDbContext>(options =>
 
 // Health Checks
 builder.Services.AddHealthChecks()
-    .AddCheck("self", () => HealthCheckResult.Healthy("Application is running"))
-    .AddDbContextCheck<MediaBridgeDbContext>("database", failureStatus: HealthStatus.Degraded);
+ .AddCheck("self", () => HealthCheckResult.Healthy("Application is running"))
+ .AddDbContextCheck<MediaBridgeDbContext>("database", failureStatus: HealthStatus.Degraded);
 
 // Services
 builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
@@ -82,13 +82,48 @@ builder.Services.AddTransient<ICaching, Caching>();
 builder.Services.AddTransient<IHttpClientService, HttpClientService>();
 builder.Services.AddTransient<IGetConfig, GetConfig>();
 
+// DB migration flag (read from appsettings.*). We'll use this to decide whether to register the hosted service.
+var applyMigrations = builder.Configuration.GetValue<bool>("ApplyDbMigrations", false);
+
 // Background Services
-builder.Services.AddHostedService<DownloadQueueBackgroundService>();
+if (!applyMigrations)
+{
+    builder.Services.AddHostedService<DownloadQueueBackgroundService>();
+}
 
 // HttpClient
 builder.Services.AddHttpClient();
 
 var app = builder.Build();
+
+try
+{
+    if (applyMigrations)
+    {
+        using (var scope = app.Services.CreateScope())
+        {
+            var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+            try
+            {
+                logger.LogWarning("ApplyDbMigrations={ApplyDbMigrations}", applyMigrations);
+                logger.LogInformation("ApplyDbMigrations enabled - applying pending EF Core migrations...");
+                var db = scope.ServiceProvider.GetRequiredService<MediaBridgeDbContext>();
+                db.Database.Migrate();
+                logger.LogInformation("Database migrations applied successfully.");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "An error occurred while applying database migrations.");
+                throw;
+            }
+        }
+    }
+}
+catch (Exception ex)
+{
+    Console.WriteLine("Error while attempting to apply migrations: " + ex);
+    throw;
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
