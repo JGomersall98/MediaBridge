@@ -33,7 +33,8 @@ namespace MediaBridge.Services.Admin
                 Description = c.Description,
                 DateCreated = c.Created.ToString("yyyy-MM-dd HH:mm:ss"),
                 DateUpdated = c.Updated?.ToString("yyyy-MM-dd HH:mm:ss")
-            }).ToList();
+            }).OrderByDescending(c => c.Id).ToList();
+
 
             response.IsSuccess = true;
             return response;
