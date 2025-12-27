@@ -81,15 +81,9 @@ builder.Services.AddTransient<IUtilService, UtilService>();
 builder.Services.AddTransient<ICaching, Caching>();
 builder.Services.AddTransient<IHttpClientService, HttpClientService>();
 builder.Services.AddTransient<IGetConfig, GetConfig>();
+builder.Services.AddHostedService<DownloadQueueBackgroundService>();
 
-// DB migration flag (read from appsettings.*). We'll use this to decide whether to register the hosted service.
 var applyMigrations = builder.Configuration.GetValue<bool>("ApplyDbMigrations", false);
-
-// Background Services
-if (!applyMigrations)
-{
-    builder.Services.AddHostedService<DownloadQueueBackgroundService>();
-}
 
 // HttpClient
 builder.Services.AddHttpClient();
