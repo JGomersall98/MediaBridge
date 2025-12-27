@@ -27,33 +27,47 @@ jobs:
       - name: Build
         run: dotnet build -c Release --no-restore
 
-      # CHANGE THIS PATH to your web project
       - name: Publish
         run: dotnet publish .\MediaBridge.csproj -c Release -o "${{ env.PUBLISH_PATH }}" --no-build
 
-      - name: Stop IIS
+      - name: Stop IIS (only if running)
         shell: powershell
         run: |
           Import-Module WebAdministration
-          Stop-Website -Name "${env:IIS_SITE_NAME}"
+          $siteName = "${env:IIS_SITE_NAME}"
+          $appPool  = (Get-Item "IIS:\Sites\$siteName").applicationPool
 
-      - name: Copy files
-        shell: powershell
-        run: |
-          robocopy "${env:PUBLISH_PATH}" "${env:DEPLOY_PATH}" /MIR /R:2 /W:2
-          $rc = $LASTEXITCODE
-      
-          # Robocopy exit codes < 8 are success
-          if ($rc -lt 8) {
-            Write-Host "Robocopy completed successfully with exit code $rc"
-            exit 0
-          } else {
-            Write-Error "Robocopy failed with exit code $rc"
-            exit 1
+          if ((Get-Website -Name $siteName).State -ne "Stopped") {
+            Stop-Website -Name $siteName
           }
 
-      - name: Start IIS
+          if ((Get-WebAppPoolState -Name $appPool).Value -ne "Stopped") {
+            Stop-WebAppPool -Name $appPool
+          }
+
+          Start-Sleep -Seconds 2
+
+      - name: Copy files (exclude logs)
+        shell: powershell
+        run: |
+          robocopy "${env:PUBLISH_PATH}" "${env:DEPLOY_PATH}" /MIR /R:2 /W:2 /XD "logs"
+          $rc = $LASTEXITCODE
+
+          # Robocopy exit codes < 8 are success
+          if ($rc -ge 8) { exit 1 }
+          exit 0
+
+      - name: Start IIS (only if stopped)
         shell: powershell
         run: |
           Import-Module WebAdministration
-          Start-Website -Name "${env:IIS_SITE_NAME}"
+          $siteName = "${env:IIS_SITE_NAME}"
+          $appPool  = (Get-Item "IIS:\Sites\$siteName").applicationPool
+
+          if ((Get-WebAppPoolState -Name $appPool).Value -ne "Started") {
+            Start-WebAppPool -Name $appPool
+          }
+
+          if ((Get-Website -Name $siteName).State -ne "Started") {
+            Start-Website -Name $siteName
+          }
