@@ -1,79 +1,25 @@
-name: Deploy prd (IIS + MySQL migrations)
+name: Deploy to IIS
 
 on:
   push:
     branches: [ "prd" ]
 
-concurrency:
-  group: mediabridge-prd
-  cancel-in-progress: true
-
 jobs:
   deploy:
-    # If you added a label like "iis-prod" to your runner, keep this:
-    runs-on: [self-hosted, windows, iis-prod]
-    # Otherwise use:
-    # runs-on: self-hosted
+    runs-on: self-hosted
 
     env:
       IIS_SITE_NAME: "MediaBridge"
       DEPLOY_PATH: "C:\\inetpub\\wwwroot\\MediaBridge"
-      PUBLISH_PATH: "${{ github.workspace }}\\_publish"
+      PUBLISH_PATH: "${{ github.workspace }}\\publish"
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup .NET SDK
+      - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "8.0.x"  # change to 6.0.x or 7.0.x if needed
-
-      - name: Resolve Web + Migrations projects
-        shell: powershell
-        run: |
-          $ErrorActionPreference = "Stop"
-
-          # Find migrations project under .\Migrations\
-          $mig = Get-ChildItem -Path ".\Migrations" -Filter *.csproj -Recurse -ErrorAction SilentlyContinue
-          if (-not $mig -or $mig.Count -eq 0) {
-            throw "No .csproj found under .\Migrations\. Ensure your migrations are in a project at Migrations\*.csproj"
-          }
-          if ($mig.Count -gt 1) {
-            Write-Host "Multiple migration projects found:"
-            $mig | ForEach-Object { Write-Host " - $($_.FullName)" }
-            throw "More than one .csproj under .\Migrations\. Keep only one or hardcode it."
-          }
-          $MIGRATIONS_CSPROJ = $mig[0].FullName
-
-          # Find the web project (SDK Web)
-          $all = Get-ChildItem -Path "." -Filter *.csproj -Recurse
-          $web = @()
-          foreach ($p in $all) {
-            $txt = Get-Content $p.FullName -Raw
-            if ($txt -match "Microsoft\.NET\.Sdk\.Web") { $web += $p }
-          }
-
-          if ($web.Count -eq 0) {
-            Write-Host "No SDK Web project found. Projects discovered:"
-            $all | ForEach-Object { Write-Host " - $($_.FullName)" }
-            throw "Could not find a web project (.csproj using Microsoft.NET.Sdk.Web). Hardcode WEB_CSPROJ in this workflow."
-          }
-          if ($web.Count -gt 1) {
-            Write-Host "Multiple web projects found:"
-            $web | ForEach-Object { Write-Host " - $($_.FullName)" }
-            throw "More than one web project found. Hardcode the correct WEB_CSPROJ in this workflow."
-          }
-
-          $WEB_CSPROJ = $web[0].FullName
-
-          "MIGRATIONS_CSPROJ=$MIGRATIONS_CSPROJ" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "WEB_CSPROJ=$WEB_CSPROJ"               | Out-File -FilePath $env:GITHUB_ENV -Append
-          "STARTUP_CSPROJ=$WEB_CSPROJ"           | Out-File -FilePath $env:GITHUB_ENV -Append
-
-          Write-Host "MIGRATIONS_CSPROJ = $MIGRATIONS_CSPROJ"
-          Write-Host "WEB_CSPROJ        = $WEB_CSPROJ"
-          Write-Host "STARTUP_CSPROJ    = $WEB_CSPROJ"
+          dotnet-version: "8.0.x"
 
       - name: Restore
         run: dotnet restore
@@ -81,61 +27,32 @@ jobs:
       - name: Build
         run: dotnet build -c Release --no-restore
 
-      - name: Install dotnet-ef (local tool)
-        shell: powershell
-        run: |
-          dotnet tool update dotnet-ef --tool-path "${{ github.workspace }}\.tools"
-          & "${{ github.workspace }}\.tools\dotnet-ef" --version
-
-      - name: Apply DB migrations (EF Core)
-        shell: powershell
-        env:
-          ASPNETCORE_ENVIRONMENT: "Production"
-        run: |
-          $ErrorActionPreference = "Stop"
-
-          # NOTE: Your MySQL connection string must be available on the server, typically as:
-          #   ConnectionStrings__DefaultConnection
-          # set as a MACHINE environment variable (recommended), or otherwise resolvable by your config.
-          if ([string]::IsNullOrWhiteSpace($env:ConnectionStrings__DefaultConnection)) {
-            Write-Host "WARNING: ConnectionStrings__DefaultConnection is not set in this runner process."
-            Write-Host "If your app uses another config source (appsettings.Production.json / user secrets), migrations may still work."
-            Write-Host "Recommended: set a MACHINE env var ConnectionStrings__DefaultConnection and restart the runner service."
-          }
-
-          & "${{ github.workspace }}\.tools\dotnet-ef" database update `
-            --project "${env:MIGRATIONS_CSPROJ}" `
-            --startup-project "${env:STARTUP_CSPROJ}" `
-            --configuration Release
-
+      # CHANGE THIS PATH to your web project
       - name: Publish
-        shell: powershell
-        run: |
-          Remove-Item -Recurse -Force "${env:PUBLISH_PATH}" -ErrorAction SilentlyContinue
-          dotnet publish "${env:WEB_CSPROJ}" -c Release -o "${env:PUBLISH_PATH}" --no-build
+        run: dotnet publish .\MediaBridge.csproj -c Release -o "${{ env.PUBLISH_PATH }}" --no-build
 
-      - name: Stop IIS Website
+      - name: Stop IIS
         shell: powershell
         run: |
           Import-Module WebAdministration
-          if (Test-Path "IIS:\Sites\${env:IIS_SITE_NAME}") {
-            Stop-Website -Name "${env:IIS_SITE_NAME}"
-          } else {
-            throw "IIS site '${env:IIS_SITE_NAME}' not found. Update IIS_SITE_NAME in the workflow."
-          }
+          Stop-Website -Name "${env:IIS_SITE_NAME}"
 
-      - name: Deploy to IIS folder
+      - name: Copy files
         shell: powershell
         run: |
-          New-Item -ItemType Directory -Force -Path "${env:DEPLOY_PATH}" | Out-Null
-
-          # Mirror published output into the IIS site folder
-          robocopy "${env:PUBLISH_PATH}" "${env:DEPLOY_PATH}" /MIR /R:2 /W:2 /NFL /NDL /NP
-          $code = $LASTEXITCODE
+          robocopy "${env:PUBLISH_PATH}" "${env:DEPLOY_PATH}" /MIR /R:2 /W:2
+          $rc = $LASTEXITCODE
+      
           # Robocopy exit codes < 8 are success
-          if ($code -ge 8) { exit $code }
+          if ($rc -lt 8) {
+            Write-Host "Robocopy completed successfully with exit code $rc"
+            exit 0
+          } else {
+            Write-Error "Robocopy failed with exit code $rc"
+            exit 1
+          }
 
-      - name: Start IIS Website
+      - name: Start IIS
         shell: powershell
         run: |
           Import-Module WebAdministration
