@@ -11,8 +11,7 @@ namespace MediaBridge.Services.Background
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<DownloadQueueBackgroundService> _logger;
         private readonly TimeSpan _period = TimeSpan.FromSeconds(15);
-        private readonly TimeSpan _sixHourPeriod = TimeSpan.FromHours(11);
-        private DateTime _lastSixHourRun = DateTime.MinValue;
+        private readonly TimeSpan _sixHourPeriod = TimeSpan.FromHours(6);
 
         public DownloadQueueBackgroundService(
             IServiceProvider serviceProvider,
@@ -40,7 +39,6 @@ namespace MediaBridge.Services.Background
                     await downloadProcessorService.ProcessSonarrQueue();
                     await downloadProcessorService.ProcessRadarrQueue();
                     await downloadProcessorService.ProcessStuckMedia();
-                    await downloadProcessorService.ScrapeRadarrMovies();
                 }
                 catch (Exception ex)
                 {
@@ -76,12 +74,12 @@ namespace MediaBridge.Services.Background
             {
                 try
                 {
-                    _logger.LogInformation("Running 11-hour maintenance task...");
+                    _logger.LogInformation("Running 6-hour maintenance task...");
 
                     using var scope = _serviceProvider.CreateScope();
                     var downloadProcessorService = scope.ServiceProvider
                         .GetRequiredService<IDownloadProcessorService>();
-                    //await downloadProcessorService.ScrapeRadarrMovies();
+                    await downloadProcessorService.ScrapeRadarrMovies();
                     await downloadProcessorService.ScrapeSonarrShows();
 
                     var dashboardService = scope.ServiceProvider.GetRequiredService<IDashboardService>();
@@ -96,7 +94,7 @@ namespace MediaBridge.Services.Background
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error occurred during 11-hour maintenance task.");
+                    _logger.LogError(ex, "Error occurred during 6-hour maintenance task.");
                 }
             }
         }
