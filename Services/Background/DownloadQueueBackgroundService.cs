@@ -42,7 +42,7 @@ namespace MediaBridge.Services.Background
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error occurred while processing Sonarr queue.");
+                    _logger.LogError(ex, "Error occurred while processing Sonarr/Radarr queues or stuck media.");
                 }
 
                 try
@@ -77,13 +77,42 @@ namespace MediaBridge.Services.Background
                     _logger.LogInformation("Running 6-hour maintenance task...");
 
                     using var scope = _serviceProvider.CreateScope();
-                    var downloadProcessorService = scope.ServiceProvider
-                        .GetRequiredService<IDownloadProcessorService>();
-                    await downloadProcessorService.ScrapeRadarrMovies();
-                    await downloadProcessorService.ScrapeSonarrShows();
+                    var downloadProcessorService = scope.ServiceProvider.GetRequiredService<IDownloadProcessorService>();
 
-                    var dashboardService = scope.ServiceProvider.GetRequiredService<IDashboardService>();
-                    await dashboardService.RefreshCaches();
+                    // Run each maintenance task independently so one failure doesn't stop others
+                    try
+                    {
+                        _logger.LogInformation("Starting ScrapeRadarrMovies...");
+                        await downloadProcessorService.ScrapeRadarrMovies();
+                        _logger.LogInformation("Completed ScrapeRadarrMovies.");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "ScrapeRadarrMovies failed.");
+                    }
+
+                    try
+                    {
+                        _logger.LogInformation("Starting ScrapeSonarrShows...");
+                        await downloadProcessorService.ScrapeSonarrShows();
+                        _logger.LogInformation("Completed ScrapeSonarrShows.");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "ScrapeSonarrShows failed.");
+                    }
+
+                    try
+                    {
+                        var dashboardService = scope.ServiceProvider.GetRequiredService<IDashboardService>();
+                        _logger.LogInformation("Starting RefreshCaches...");
+                        await dashboardService.RefreshCaches();
+                        _logger.LogInformation("Completed RefreshCaches.");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "RefreshCaches failed.");
+                    }
 
                     _logger.LogInformation("6-hour maintenance task completed.");
                     await Task.Delay(_sixHourPeriod, stoppingToken);
