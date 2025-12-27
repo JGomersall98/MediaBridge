@@ -26,11 +26,11 @@ Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Information)
     .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Infrastructure", LogEventLevel.Warning)
-    .WriteTo.Console()
+    .WriteTo.Console(outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}")
     .WriteTo.File("logs/application-.log",
         rollingInterval: RollingInterval.Day,
         retainedFileCountLimit: 7,
-        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {SourceContext} {Message:lj}{NewLine}{Exception}",
+        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] [{SourceContext}] [PID:{ProcessId}] [TID:{ThreadId}] {Message:lj}{NewLine}{Exception}",
         restrictedToMinimumLevel: LogEventLevel.Information)
     .WriteTo.Logger(sqlLogger => sqlLogger
     .Filter.ByIncludingOnly(evt => evt.Properties.ContainsKey("SourceContext") &&
@@ -38,8 +38,10 @@ Log.Logger = new LoggerConfiguration()
     .WriteTo.File("logs/sql-.log",
         rollingInterval: RollingInterval.Day,
         retainedFileCountLimit: 7,
-        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}",
-        restrictedToMinimumLevel: LogEventLevel.Information))
+        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] [SQL] [PID:{ProcessId}] [TID:{ThreadId}] {Message:lj}{NewLine}{Exception}",
+            restrictedToMinimumLevel: LogEventLevel.Information))
+    .Enrich.WithProcessId()
+    .Enrich.WithThreadId()
     .CreateLogger();
 
 // Clear default providers and use Serilog
