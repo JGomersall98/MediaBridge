@@ -27,23 +27,24 @@ jobs:
       - name: Build
         run: dotnet build -c Release --no-restore
 
-      # CHANGE THIS PATH to your web project
       - name: Publish
         run: dotnet publish .\MediaBridge.csproj -c Release -o "${{ env.PUBLISH_PATH }}" --no-build
 
-      - name: Stop IIS
+      - name: Stop IIS (site + app pool)
         shell: powershell
         run: |
           Import-Module WebAdministration
-          Stop-Website -Name "${env:IIS_SITE_NAME}"
+          $siteName = "${env:IIS_SITE_NAME}"
+          $appPool = (Get-Item "IIS:\Sites\$siteName").applicationPool
+          Stop-Website -Name $siteName
+          Stop-WebAppPool -Name $appPool
 
-      - name: Copy files
+      - name: Copy files (exclude logs)
         shell: powershell
         run: |
-          robocopy "${env:PUBLISH_PATH}" "${env:DEPLOY_PATH}" /MIR /R:2 /W:2
+          robocopy "${env:PUBLISH_PATH}" "${env:DEPLOY_PATH}" /MIR /R:2 /W:2 /XD "logs"
           $rc = $LASTEXITCODE
-      
-          # Robocopy exit codes < 8 are success
+
           if ($rc -lt 8) {
             Write-Host "Robocopy completed successfully with exit code $rc"
             exit 0
@@ -52,8 +53,11 @@ jobs:
             exit 1
           }
 
-      - name: Start IIS
+      - name: Start IIS (app pool + site)
         shell: powershell
         run: |
           Import-Module WebAdministration
-          Start-Website -Name "${env:IIS_SITE_NAME}"
+          $siteName = "${env:IIS_SITE_NAME}"
+          $appPool = (Get-Item "IIS:\Sites\$siteName").applicationPool
+          Start-WebAppPool -Name $appPool
+          Start-Website -Name $siteName
