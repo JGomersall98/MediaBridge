@@ -19,7 +19,7 @@ namespace MediaBridge.Models.Dashboard
         public int TmdbId { get; set; }
         public double? ImbdRating { get; set; }
         public bool? HasMedia { get; set; }
-
+        public MediaAvailability? MediaAvailability { get; set; }
     }
     public class MediaSeasonItem
     {
@@ -30,6 +30,11 @@ namespace MediaBridge.Models.Dashboard
         public string? AirDate { get; set; }
         public bool? HasFile { get; set; }
         public bool? HasPartFile { get; set; }
-        
+    }
+    public class MediaAvailability
+    {
+        public bool? IsAvailable { get; set; }
+        public bool? NotReleased { get; set; }
+        public bool? English { get; set; }
     }
 }
