@@ -144,6 +144,12 @@ namespace MediaBridge.Services.Dashboard
             {
                 var info = mediaMovieInfos.FirstOrDefault(m => m.InfoIds!.ImdbId == movie.ImdbId);
 
+                bool isReleased = await CheckReleased(info!.InfoIds!.TmdbId, movie.Title);
+                if (!isReleased)
+                {
+                    continue;
+                }
+
                 if (info != null)
                 {
                     movie.TmdbId = info.InfoIds!.TmdbId;
@@ -156,6 +162,35 @@ namespace MediaBridge.Services.Dashboard
             }
             Console.WriteLine("Completed fetching Tmdb IDs for movies.");
             return mediaMovieInfos;
+        }
+        private async Task<bool> CheckReleased(int tmdbId, string title)
+        {
+            string url = await _config.GetConfigValueAsync("radarr_get_movie_endpoint");
+            string apiKey = await _config.GetConfigValueAsync("radarr_api_key");
+
+            string fullUrl = url.Replace("{id}", tmdbId.ToString()) + apiKey;
+
+            var httpResponse = await _httpClientService.GetStringAsync(fullUrl);
+            List<CheckReleasedResponse>? response = null;
+            try
+            {
+                response = JsonSerializer.Deserialize<List<CheckReleasedResponse>>(httpResponse, _jsonOptions);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error checking release date for movie: {title} (TMDB ID: {tmdbId})");
+                return false;
+            }
+            
+            if (response != null && response.Count > 0)
+            {
+                var releaseInfo = response[0];
+                if (releaseInfo.DigitalRelease.HasValue)
+                {
+                    return releaseInfo.DigitalRelease.Value <= DateTime.UtcNow;
+                }
+            }
+            return false;
         }
 
         private async Task GetTmdIdForTvShowAsync(MdbListApiResponse mdbListApiResponse, string mediaType)
@@ -458,5 +493,10 @@ namespace MediaBridge.Services.Dashboard
                 _logger.LogError(ex, "Error getting top TV shows");
             }
         }
+    }
+    public class CheckReleasedResponse
+    {
+        [JsonPropertyName("digitalRelease")]
+        public DateTime? DigitalRelease { get; set; }
     }
 }
