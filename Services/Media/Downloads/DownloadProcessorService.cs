@@ -95,6 +95,7 @@ namespace MediaBridge.Services.Media.Downloads
                 if (downloadRequest.Status == "completed" && !downloadRequest.CompletedAt.HasValue)
                 {
                     downloadRequest.CompletedAt = DateTime.UtcNow;
+                    await ScrapeRadarrMovies();
                 }
 
                 Console.WriteLine($"Updated movie {downloadRequest.Title}: {downloadPercentage}% - {downloadRequest.Status}");
@@ -119,6 +120,7 @@ namespace MediaBridge.Services.Media.Downloads
                     movie.UpdatedAt = DateTime.UtcNow;
                     Console.WriteLine($"Marked movie '{movie.Title}' as completed due to inactivity.");
                 }
+                await ScrapeRadarrMovies();
             }
 
             // Get stuck episodes 
@@ -138,6 +140,7 @@ namespace MediaBridge.Services.Media.Downloads
                     episode.UpdatedAt = DateTime.UtcNow;
                     Console.WriteLine($"Marked episode '{episode.Title}' as completed due to inactivity.");
                 }
+                await ScrapeSonarrShows();
             }
 
             List<DownloadRequests> downloadingShows = await _db.DownloadRequests
@@ -248,6 +251,14 @@ namespace MediaBridge.Services.Media.Downloads
                 {
                     if (season.SeasonNumber != 0)
                     {
+                        // If size on disk is greater than 0, set episodes downloaded to the episode count
+                        // Episode count may be more than 1 if there are errors when downloading (sonarr quirk)
+                        int episodesDownloaded = 0;
+                        if(season.Statistics!.SizeOnDisk > 0)
+                        {                           
+                            episodesDownloaded = season.Statistics.EpisodeCount;
+                        }
+
                         DownloadedShows seasonChild = new DownloadedShows()
                         {
                             Title = show.Title + " S" + season.SeasonNumber,
@@ -255,7 +266,7 @@ namespace MediaBridge.Services.Media.Downloads
                             HasFile = AllShowsInSeasonDownloaded(season),
                             SeasonNumber = season.SeasonNumber,
                             EpisodesInSeason = season.Statistics!.TotalEpisodeCount,
-                            EpisodesDownloaded = season.Statistics.EpisodeCount,
+                            EpisodesDownloaded = episodesDownloaded,
                             ImdbId = show.ImdbId,
                             TvdbId = show.TvdbId,
                             SizeOnDiskGB = GetSizeOnDiskGB(season.Statistics.SizeOnDisk),
@@ -452,6 +463,7 @@ namespace MediaBridge.Services.Media.Downloads
                     if (download.Status == "completed" && !download.CompletedAt.HasValue)
                     {
                         download.CompletedAt = DateTime.UtcNow;
+                        await ScrapeSonarrShows();
                     }
 
                     Console.WriteLine($"Updated episode {download.EpisodeId}: {downloadPercentage}% - {download.Status}");

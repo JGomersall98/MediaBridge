@@ -218,6 +218,12 @@ namespace MediaBridge.Services.Media
                                 // Season is downloaded in full
                                 season.HasFile = true;
                             }
+                            else if(existingSeason.EpisodesDownloaded! <= 0)
+                            {
+                                // Season exists but no episodes are downloaded
+                                season.HasFile = false;
+                                season.HasPartFile = false;
+                            }
                             else
                             {
                                 // Season exists but is not downloaded in full
@@ -244,6 +250,16 @@ namespace MediaBridge.Services.Media
                 else
                 {
                     show.HasMedia = false;
+                }
+
+                // Part media check
+                if (show.Seasons != null)
+                {
+                    show.HasPartMedia = show.Seasons.Any(s => s.HasFile == true || s.HasPartFile == true);
+                }
+                else
+                {
+                    show.HasPartMedia = false;
                 }
             }
             return mediaItems;
