@@ -19,6 +19,7 @@ namespace MediaBridge.Models.Dashboard
         public int TmdbId { get; set; }
         public double? ImbdRating { get; set; }
         public bool? HasMedia { get; set; }
+        public bool? HasPartMedia { get; set; }
         public MediaAvailability? MediaAvailability { get; set; }
     }
     public class MediaSeasonItem

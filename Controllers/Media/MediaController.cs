@@ -22,7 +22,7 @@ namespace MediaBridge.Controllers.Media
         // POST : /api/download
         [HttpPost]
         [Authorize(Roles = "Admin,Maintainer,User")]
-        public async Task<IActionResult> Post([FromQuery] int tmbId, string mediaType, [FromBody] int[]? seasonsRequested)
+        public async Task<IActionResult> Post([FromQuery] int tmbId, string mediaType, [FromBody] int[] seasonsRequested)
         {
             StandardResponse response = new StandardResponse();
 
@@ -31,6 +31,17 @@ namespace MediaBridge.Controllers.Media
 
             response = await _mediaService.DownloadMedia(tmbId, userId, username, seasonsRequested, mediaType);
 
+            return Ok(response);
+        }
+        // POST : /api/media/season
+        [HttpPost("season")]
+        [Authorize(Roles = "Admin,Maintainer,User")]
+        public async Task<IActionResult> PostSeasonDownload([FromQuery] string imdbId, [FromBody] int[] seasonsRequested)
+        {
+            StandardResponse response = new StandardResponse();
+            int userId = User.GetUserId();
+            string username = User.GetUsername();
+            response = await _mediaService.PartialSeriesDownload(imdbId, userId, username, seasonsRequested);
             return Ok(response);
         }
     }
