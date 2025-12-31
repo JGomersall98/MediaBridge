@@ -256,7 +256,7 @@ namespace MediaBridge.Services.Media.Downloads
                         int episodesDownloaded = 0;
                         if(season.Statistics!.SizeOnDisk > 0)
                         {                           
-                            episodesDownloaded = season.Statistics.EpisodeCount;
+                            episodesDownloaded = season.Statistics.EpisodeFileCount;
                         }
 
                         DownloadedShows seasonChild = new DownloadedShows()
