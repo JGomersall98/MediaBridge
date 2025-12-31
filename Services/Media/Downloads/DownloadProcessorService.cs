@@ -308,7 +308,8 @@ namespace MediaBridge.Services.Media.Downloads
 
             if (season!.Statistics!.EpisodeCount > 1)
             {
-                if(season.Statistics.EpisodeCount == season.Statistics.TotalEpisodeCount)
+                // Probably overkill but could also do this -> && season.Statistics.PercentOfEpisodes == 100 
+                if (season.Statistics.EpisodeFileCount == season.Statistics.TotalEpisodeCount)
                 {
                     // Total episodes in season are equal to episodes downloaded
                     return true;
