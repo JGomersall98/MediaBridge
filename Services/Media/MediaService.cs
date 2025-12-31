@@ -4,6 +4,7 @@ using MediaBridge.Database;
 using MediaBridge.Database.DB_Models;
 using MediaBridge.Models;
 using MediaBridge.Services.Helpers;
+using MediaBridge.Services.Media.Downloads;
 
 namespace MediaBridge.Services.Media
 {
@@ -61,6 +62,130 @@ namespace MediaBridge.Services.Media
 
             return response;
         }      
+        public async Task<StandardResponse> PartialSeriesDownload(string imdbId, int userId, string username, int[] seasonsRequested)
+        {
+            string configUrl = await _config.GetConfigValueAsync("sonarr_get_show_endpoint");
+            if (!string.IsNullOrEmpty(configUrl)) 
+            {
+                configUrl = configUrl.Replace("{id}", imdbId);
+            }
+            await SetSonarrApiKeyAsync();
+            string apiUrl = configUrl += _sonarrApiKey;
+
+            string response = await _httpClientService.GetStringAsync(apiUrl);
+
+            List<SonarrShowDetails>? showDetails = JsonSerializer.Deserialize<List<SonarrShowDetails>>(response, _jsonOptions);
+
+            
+
+            // For the requested season numbers, set monitored to true
+            if (!showDetails.Any())
+            {
+                StandardResponse errorResponse = new StandardResponse
+                {
+                    IsSuccess = false,
+                    Reason = "Show not found in Sonarr."
+                };
+                return errorResponse;
+            }
+
+            SonarrShowDetails show = showDetails.First();
+
+            List<SonarrEpisode> episodeDetails = await GetEpisodeInfoFromShow(show.SonarrId);
+            if(!episodeDetails.Any())
+            {
+                StandardResponse errorResponse = new StandardResponse
+                {
+                    IsSuccess = false,
+                    Reason = "No episodes found for the show in Sonarr."
+                };
+                return errorResponse;
+            }
+
+            foreach (var season in show.Seasons!)
+            {
+                if (seasonsRequested.Contains(season.SeasonNumber!.Value))
+                {
+                    season.Monitored = true;
+
+                    // Trigger Episode Search
+                    var episodesInSeason = episodeDetails
+                        .Where(e => e.SeasonNumber == season.SeasonNumber)
+                        .Select(e => e.Id)
+                        .ToList();
+
+                    if (episodesInSeason.Any())
+                    {
+                        string episodeSearchUrl = await _config.GetConfigValueAsync("sonarr_post_episode_search_endpoint");
+                        string url = episodeSearchUrl + _sonarrApiKey;
+
+                        var payload = new
+                        {
+                            name = "EpisodeSearch",
+                            episodeIds = episodesInSeason
+                        };
+
+                        string payloadJson = JsonSerializer.Serialize(payload);
+                        HttpResponseString episodeSearchResponse = await _httpClientService.PostStringAsync(url, payloadJson);
+
+                        if (!episodeSearchResponse.IsSuccess)
+                        {
+                            StandardResponse errorResponse = new StandardResponse
+                            {
+                                IsSuccess = false,
+                                Reason = "Failed to trigger episode search."
+                            };
+                            return errorResponse;
+                        }
+
+                        await LogMediaRequest(userId, username, show.TvdbId, "show", show.Title!, true, null);
+
+                        List<DownloadRequests> existingDownload = _db.DownloadRequests
+                            .Where(dr => dr.MediaType == "show" && dr.TvdbId == show.TvdbId)
+                            .ToList();
+
+                        // if no existing download request, add one
+                        if (!existingDownload.Any())
+                        {
+                            await AddToDownloadRequests(new RSGetMediaResponse
+                            {
+                                MediaId = show.SonarrId!.Value,
+                                TvdbId = show.TvdbId,
+                                Title = show.Title,
+                                Description = show.Description,
+                                PosterUrl = show.PosterUrl,
+                                ReleaseYear = show.ReleaseYear
+                            }, "show", userId);
+                        }
+                    }
+                }
+            }
+            return new StandardResponse
+            {
+                IsSuccess = true
+            };
+        }
+
+        private async Task<List<SonarrEpisode>> GetEpisodeInfoFromShow(int? sonarrId)
+        {
+            if (sonarrId == null)
+            {
+                return new List<SonarrEpisode>();
+            }
+            string apiUrl = await BuildSonarrEpisodeDataUrl(sonarrId.ToString()!);
+
+            string response = await _httpClientService.GetStringAsync(apiUrl);
+
+            List<SonarrEpisode>? sonarrEpisodes = JsonSerializer.Deserialize<List<SonarrEpisode>>(response, _jsonOptions);
+
+            return sonarrEpisodes!;
+        }
+        private async Task<string> BuildSonarrEpisodeDataUrl(string seriesId)
+        {
+            string baseUrl = await _config.GetConfigValueAsync("sonarr_episode_data_endpoint");
+            await SetSonarrApiKeyAsync();
+            return baseUrl!.Replace("{ApiKey}", _sonarrApiKey!).Replace("{seriesId}", seriesId);
+        }
 
         private async Task AddToDownloadRequests(RSGetMediaResponse media, string mediaType, int userId)
         {
@@ -276,13 +401,29 @@ namespace MediaBridge.Services.Media
         public bool? SearchForMissingEpisodes { get; set; } = true;
         public bool? SearchForCutoffUnmetEpisodes { get; set; } = true;
     }
+    public class MediaErrorResponse
+    {
+        public string? ErrorMessage { get; set; }
+    }
     public class Season
     {
         public int? SeasonNumber { get; set; }
         public bool? Monitored { get; set; }
     }
-    public class MediaErrorResponse
+    public class SonarrShowDetails
     {
-        public string? ErrorMessage { get; set; }
+        [JsonPropertyName("id")]
+        public int? SonarrId { get; set; }
+        [JsonPropertyName("tvdbId")]
+        public int TvdbId { get; set; }
+        public string? Title { get; set; }
+        public string? TitleSlug { get; set; }
+        public List<Season>? Seasons { get; set; }
+        [JsonPropertyName("overview")]
+        public string? Description { get; set; }
+        [JsonPropertyName("remotePoster")]
+        public string? PosterUrl { get; set; }
+        [JsonPropertyName("year")]
+        public int? ReleaseYear { get; set; }
     }
 }

@@ -70,6 +70,7 @@ namespace MediaBridge.Services.Media
                 var movieInfoList = JsonSerializer.Deserialize<List<MediaMovieInfo>>(mediaInfoResponse, _jsonOptions);
                 mediaItems = BuildMediaItemList(searchResult, movieInfoList);
                 await AlreadyExistingMovies(mediaItems);
+                await AddMovieAvailability("movie", mediaItems);
             }
             else if (media == "show")
             {
@@ -81,6 +82,99 @@ namespace MediaBridge.Services.Media
             response.Media = mediaItems;
             response.IsSuccess = true;
             return response;
+        }
+        private async Task AddMovieAvailability(string mediaType, List<MediaItem> mediaItems)
+        {
+            string url = await _config.GetConfigValueAsync("tmdb_release_date_endpoint");
+            string apiKey = await _config.GetConfigValueAsync("tmdb_api_key");
+            
+            foreach (var mediaItem in mediaItems)
+            {
+                string releaseDateUrl = BuildTmdbReleaseDateUrl(mediaType, mediaItem.TmdbId, apiKey!);
+
+                var releaseDates = await _httpClientService.GetStringAsync(releaseDateUrl);
+                TmdbIdResponse tmdbIdResponse = JsonSerializer.Deserialize<TmdbIdResponse>(releaseDates, _jsonOptions);
+
+                if (tmdbIdResponse?.ResultsPerRegion == null)
+                {
+                    mediaItem.MediaAvailability = new MediaAvailability
+                    {
+                        IsAvailable = false,
+                        NotReleased = true
+                    };
+                    continue;
+                }
+
+                List<ResultsPerRegion> releaseData = tmdbIdResponse.ResultsPerRegion;
+
+                if (releaseData.Count == 0)
+                {
+                    mediaItem.MediaAvailability = new MediaAvailability
+                    {
+                        IsAvailable = false,
+                        NotReleased = true
+                    };
+                    continue;
+                }
+
+               if(releaseData.Any(rpr => rpr.ReleaseData != null && rpr.ReleaseData!
+                    .Any(rd => rd.Type == TmdbReleaseType.Digital || rd.Type == TmdbReleaseType.Physical || rd.Type == TmdbReleaseType.TV)))
+                {
+                    mediaItem.MediaAvailability = new MediaAvailability
+                    {
+                        IsAvailable = true,
+                        NotReleased = false,
+                        English = IsEnglish(releaseData),
+                    };
+                }
+                else
+                {
+                    // If the media was released more than a year ago, it has probably been released
+                    bool notReleased = true;
+                    if (mediaItem.ReleaseYear < DateTime.UtcNow.Year - 1)
+                    {
+                        notReleased = false;
+                    }
+
+                    mediaItem.MediaAvailability = new MediaAvailability
+                    {
+                        IsAvailable = false,
+                        NotReleased = notReleased,
+                        English = IsEnglish(releaseData),
+                    };
+                    
+                }
+            }
+
+            // Sort list by English first, then availability
+            mediaItems.Sort((x, y) =>
+            {
+                // First sort by English (English content comes first)
+                int englishComparison = (y.MediaAvailability?.English ?? false).CompareTo(x.MediaAvailability?.English ?? false);
+                if (englishComparison != 0)
+                {
+                    return englishComparison;
+                }
+                // Then sort by availability (available content comes first)
+                return (y.MediaAvailability?.IsAvailable ?? false).CompareTo(x.MediaAvailability?.IsAvailable ?? false);
+            });
+        }
+        private bool IsEnglish(List<ResultsPerRegion> releaseData)
+        {
+            List<string>? countryCodes = releaseData
+                .Where(rpr => rpr.CountryCode != null)
+                .Select(rpr => rpr.CountryCode!)
+                .ToList();
+
+            if (countryCodes.Contains("US") || countryCodes.Contains("GB") || countryCodes.Contains("CA") || countryCodes.Contains("AU"))
+            {
+                return true;
+            }
+            return false;
+        }
+        private string BuildTmdbReleaseDateUrl(string mediaType, int tmdbId, string apiKey)
+        {
+            return $"https://api.themoviedb.org/3/{mediaType}/{tmdbId}/release_dates?api_key={apiKey}";
         }
         private async Task<List<MediaItem>> AlreadyExistingMovies(List<MediaItem> mediaItems)
         {
@@ -124,6 +218,12 @@ namespace MediaBridge.Services.Media
                                 // Season is downloaded in full
                                 season.HasFile = true;
                             }
+                            else if(existingSeason.EpisodesDownloaded! <= 0)
+                            {
+                                // Season exists but no episodes are downloaded
+                                season.HasFile = false;
+                                season.HasPartFile = false;
+                            }
                             else
                             {
                                 // Season exists but is not downloaded in full
@@ -150,6 +250,16 @@ namespace MediaBridge.Services.Media
                 else
                 {
                     show.HasMedia = false;
+                }
+
+                // Part media check
+                if (show.Seasons != null)
+                {
+                    show.HasPartMedia = show.Seasons.Any(s => s.HasFile == true || s.HasPartFile == true);
+                }
+                else
+                {
+                    show.HasPartMedia = false;
                 }
             }
             return mediaItems;
@@ -402,6 +512,38 @@ namespace MediaBridge.Services.Media
         public int SeasonNumber { get; set; }
         [JsonPropertyName("episode_count")]
         public int EpisodeCount { get; set; }
+    }
+    public class TmdbIdResponse
+    {
+        [JsonPropertyName("results")]
+        public List<ResultsPerRegion>? ResultsPerRegion { get; set; }
+    }
+    public class ResultsPerRegion
+    {
+        [JsonPropertyName("iso_3166_1")]
+        public string? CountryCode  { get; set; }
+        [JsonPropertyName("release_dates")]
+        public List<TmdbReleaseDates>? ReleaseData { get; set; }
+    }
+    public class TmdbReleaseDates
+    {
+        [JsonPropertyName("type")]
+        public TmdbReleaseType Type { get; set; }
+    }
+    public enum TmdbReleaseType
+    {
+        // Premiere - Initial showing/premiere event
+        Premiere = 1,
+        // Theatrical (limited) - Limited theatrical release
+        TheatricalLimited = 2,
+        // Theatrical - Wide theatrical release
+        Theatrical = 3,
+        // Digital (VOD / streaming) - Digital/streaming release
+        Digital = 4,
+        // Physical (Blu-ray/DVD) - Physical media release
+        Physical = 5,
+        // TV
+        TV	= 6
     }
 }
 
