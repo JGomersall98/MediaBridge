@@ -318,7 +318,7 @@ namespace MediaBridge.Services.Media.Downloads
             return response.SidCookie!;
         }
         private static bool IsDownloadingState(string state) =>
-            state is "downloading" or "stalledDL" or "queuedDL" or "metaDL";
+            state is "downloading" or "stalledDL" or "queuedDL" or "metaDL" or "queuedUP";
 
         private static bool ShouldCull(QBittorrentTorrentInfo t)
         {
