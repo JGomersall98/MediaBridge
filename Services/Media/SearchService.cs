@@ -38,9 +38,19 @@ namespace MediaBridge.Services.Media
         {
             MdbListMediaSearchResponse response = new MdbListMediaSearchResponse();
 
-            string fullUrl = await BuildSearchRequest(media, query);
-            string httpResponse = await _httpClientService.GetStringAsync(fullUrl);
-            MbListSearchResult searchResult = JsonSerializer.Deserialize<MbListSearchResult>(httpResponse, _jsonOptions);
+            string fullUrl = "";
+            string httpResponse = "";
+            fullUrl = await BuildSearchRequest(media, query, false);
+            httpResponse = await _httpClientService.GetStringAsync(fullUrl);
+            MbListSearchResult searchResult = null;
+            searchResult = JsonSerializer.Deserialize<MbListSearchResult>(httpResponse, _jsonOptions);
+
+            if (searchResult!.SearchResult!.Count == 0)
+            {
+                fullUrl = await BuildSearchRequest(media, query, true);
+                httpResponse = await _httpClientService.GetStringAsync(fullUrl);
+                searchResult = JsonSerializer.Deserialize<MbListSearchResult>(httpResponse, _jsonOptions);
+            }
 
             List<int> traktIds = searchResult?.SearchResult?
                     .Where(s => s.Ids != null)
@@ -384,7 +394,7 @@ namespace MediaBridge.Services.Media
             HttpResponseString httpResponseString = await _httpClientService.PostStringAsync(fullUrl, payload);
             return httpResponseString.Response;
         }
-        private async Task<string> BuildSearchRequest(string media, string query)
+        private async Task<string> BuildSearchRequest(string media, string query, bool fuzzySearch)
         {
             // Get Endpoint
             string configUrl = await _config.GetConfigValueAsync(SEARCH_ENDPOINT_KEY);
@@ -394,10 +404,22 @@ namespace MediaBridge.Services.Media
                 return string.Empty;
             }
 
-            // Build apiUrl
-            string apiUrl = configUrl
-                .Replace("{mediaType}", media)
-                .Replace("{searchQuery}", query);
+            string apiUrl = "";
+            if (!fuzzySearch)
+            {
+                // Build apiUrl
+                apiUrl = configUrl
+                    .Replace("{mediaType}", media)
+                    .Replace("{searchQuery}", query);
+            }
+            else
+            {
+                apiUrl = configUrl
+                    .Replace("\"{searchQuery}\"", "{searchQuery}")
+                    .Replace("{mediaType}", media)
+                    .Replace("{searchQuery}", query);
+            }
+
 
             if (string.IsNullOrEmpty(_apiKey))
             {
