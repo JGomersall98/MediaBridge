@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using MediaBridge.Database;
 using MediaBridge.Database.DB_Models;
@@ -193,13 +194,50 @@ namespace MediaBridge.Services.Media.Downloads
                 string queueApiUrl = await BuildSonarrQueueUrl();
                 string queueResponse = await _httpClientService.GetStringAsync(queueApiUrl);
                 SonarrQueueResponse queueData = System.Text.Json.JsonSerializer.Deserialize<SonarrQueueResponse>(queueResponse)!;
-
+             
                 if (queueData?.Records == null || !queueData.Records.Any())
                 {
                     Console.WriteLine("No items found in Sonarr queue.");
                     return;
                 }
 
+                // Check Torrent Health in QBittorent
+                List<string> torrentsToDelete = await CheckTorrentHealth(queueData.Records
+                    .Where(r => !string.IsNullOrEmpty(r.TorrentId))
+                    .Select(r => r.TorrentId!)
+                    .ToList());
+
+                if (torrentsToDelete.Any())
+                {                 
+                    foreach (var torrentId in torrentsToDelete)
+                    {
+                        // get Id of Sonarr queue item from torrentId
+                        var queueItem = queueData.Records.FirstOrDefault(r => 
+                            string.Equals(r.TorrentId, torrentId, StringComparison.OrdinalIgnoreCase));
+
+                        if (queueItem != null)
+                        {
+                            await RemoveSonnarrItem(queueItem!.Id);
+
+                            // Call post to search for episode again
+                            string episodeSearchUrl = await _config.GetConfigValueAsync("sonarr_post_episode_search_endpoint");
+                            string url = episodeSearchUrl + _sonarrApiKey;
+
+                            int episodeId = queueItem.EpisodeId!.Value;
+
+                            var payload = new
+                            {
+                                name = "EpisodeSearch",
+                                episodeIds = new List<int> { episodeId }
+                            };
+
+                            string payloadJson = JsonSerializer.Serialize(payload);
+                            HttpResponseString episodeSearchResponse = await _httpClientService.PostStringAsync(url, payloadJson);
+
+                        }
+                    }
+                }
+      
                 Console.WriteLine($"Found {queueData.Records.Count} items in Sonarr queue.");
 
                 await ProcessSonarrQueueItems(queueData.Records);
@@ -208,6 +246,106 @@ namespace MediaBridge.Services.Media.Downloads
             {
                 Console.WriteLine($"Error processing Sonarr queue: {ex.Message}");
             }
+        }
+        private async Task<List<string>> CheckTorrentHealth(List<string> torrentIds)
+        {
+            string qbittorrentCookie = await GetQBitorrentCookie();
+
+            string qbittorrentApiUrl = await _config.GetConfigValueAsync("qbittorrent_torrent_info_endpoint");
+
+            var headers = new Dictionary<string, string>
+            {
+                { "Cookie", $"SID={qbittorrentCookie}" }
+            };
+
+            var response = await _httpClientService.GetStringAsync(qbittorrentApiUrl!, headers);
+
+            List<QBittorrentTorrentInfo> torrentInfos = System.Text.Json.JsonSerializer.Deserialize<List<QBittorrentTorrentInfo>>(response)!;
+
+            List<string> torrentsToCull = new List<string>();
+
+            foreach (string torrentId in torrentIds)
+            {
+                var torrentInfo = torrentInfos.FirstOrDefault(t =>
+                    string.Equals(t.TorrentId, torrentId, StringComparison.OrdinalIgnoreCase));
+
+                if (torrentInfo == null)
+                    continue;
+
+                if (ShouldCull(torrentInfo))
+                {
+                    Console.WriteLine($"Removing stuck torrent '{torrentInfo.Name}' with ID {torrentInfo.TorrentId} from Sonarr queue.");
+                    torrentsToCull.Add(torrentInfo.TorrentId);
+                }
+            }
+            return torrentsToCull;
+
+        }
+        private async Task<bool> RemoveSonnarrItem(int queueId)
+        {
+            string baseUrl = await _config.GetConfigValueAsync("sonarr_remove_queue_item_endpoint");
+
+            await SetSonarrApiKeyAsync();
+
+            string apiUrl = baseUrl!.Replace("{ApiKey}", _sonarrApiKey!)
+                                   .Replace("{id}", queueId.ToString());
+
+            var response = await _httpClientService.DeleteStringAsync(apiUrl);
+
+            if (response == "DELETE request failed.")
+            {
+                return false;
+            }
+
+            return true;
+        }
+        private async Task<string> GetQBitorrentCookie()
+        {
+            string apiUrl = await _config.GetConfigValueAsync("qbittorrent_api_cookie_endpoint");
+
+            string username = "admin";
+            string password = await _config.GetConfigValueAsync("qbittorrent_api_password");
+
+            // x-www-form-urlencoded body with username and password
+            var formParams = new Dictionary<string, string>
+            {
+                { "username", username ?? string.Empty },
+                { "password", password ?? string.Empty }
+            };
+
+            var response = await _httpClientService.PostFormUrlEncodedAsync(apiUrl!, formParams);
+
+            return response.SidCookie!;
+        }
+        private static bool IsDownloadingState(string state) =>
+            state is "downloading" or "stalledDL" or "queuedDL" or "metaDL";
+
+        private static bool ShouldCull(QBittorrentTorrentInfo t)
+        {
+            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+            // Don’t touch very new torrents
+            if (now - t.AddedOn < 180) return false; // 3 minutes
+
+            // If its downloading or seeding, don’t cull
+            if (!IsDownloadingState(t.State)) return false;
+
+            // If it has any download speed, don’t cull
+            if (t.DownloadSpeed > 0) return false;
+
+            // If it has any upload speed, don’t cull
+            var idleSeconds = now - t.LastActivity;
+            var nearComplete = t.Progress >= 0.99;
+            var idleThreshold = nearComplete ? 3600 : 600;
+            if (idleSeconds < idleThreshold) return false;
+
+            // If it has any seeds, don’t cull
+            if (t.NumSeeds > 0) return false;
+
+            // If it has any incomplete peers, don’t cull
+            if (t.Availability > 0) return false;
+
+            return true;
         }
         public async Task ScrapeSonarrShows()
         {
@@ -780,6 +918,10 @@ namespace MediaBridge.Services.Media.Downloads
 
         [JsonPropertyName("status")]
         public string? Status { get; set; }
+        [JsonPropertyName("downloadId")]
+        public string? TorrentId { get; set; }
+        [JsonPropertyName("id")]
+        public int Id { get; set; }
     }
     public class SonarrEpisode
     {
@@ -834,5 +976,51 @@ namespace MediaBridge.Services.Media.Downloads
         [JsonPropertyName("tmdbId")]
         public int TmbdId { get; set; }
     }
+    public class QBittorrentTorrentInfo
+    {
+        [JsonPropertyName("hash")]
+        public string TorrentId { get; set; }
+
+        [JsonPropertyName("name")]
+        public string Name { get; set; }
+
+        [JsonPropertyName("state")]
+        public string State { get; set; }
+
+        [JsonPropertyName("availability")]
+        public double Availability { get; set; }
+
+        [JsonPropertyName("num_seeds")]
+        public int NumSeeds { get; set; }
+
+        [JsonPropertyName("num_incomplete")]
+        public int NumIncomplete { get; set; }
+
+        [JsonPropertyName("progress")]
+        public double Progress { get; set; }
+
+        [JsonPropertyName("time_active")]
+        public long TimeActive { get; set; }
+
+        [JsonPropertyName("dlspeed")]
+        public long DownloadSpeed { get; set; }
+
+        [JsonPropertyName("upspeed")]
+        public long UploadSpeed { get; set; }
+
+        [JsonPropertyName("added_on")]
+        public long AddedOn { get; set; }
+
+        [JsonPropertyName("last_activity")]
+        public long LastActivity { get; set; }
+
+        [JsonPropertyName("amount_left")]
+        public long AmountLeft { get; set; }
+
+        [JsonPropertyName("downloaded")]
+        public long Downloaded { get; set; }
+    }
+
+
 }
 
