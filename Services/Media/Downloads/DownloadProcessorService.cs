@@ -752,6 +752,7 @@ namespace MediaBridge.Services.Media.Downloads
                 // Update parent series
                 parentSeries.DownloadPercentage = averagePercentage;
                 parentSeries.UpdatedAt = DateTime.UtcNow;
+                parentSeries.Status = "downloading"; // default status
 
                 // Calculate average minutes left (only for non-completed episodes)
                 var activeEpisodes = allSeriesEpisodes.Where(e => e.Status != "completed" && e.MinutesLeft.HasValue).ToList();
