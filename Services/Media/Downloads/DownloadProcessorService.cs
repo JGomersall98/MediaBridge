@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IdentityModel.Tokens.Jwt;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -27,11 +28,12 @@ namespace MediaBridge.Services.Media.Downloads
         }
         public async Task ProcessRadarrQueue()
         {
+            await PokeRadarrDownloads();
             try
             {
                 bool hasActiveDownloads = await _db.DownloadRequests
                     .AnyAsync(dr => (dr.MediaType == "movie") &&
-                    (dr.Status == "queued" || dr.Status == "downloading"));
+                    (dr.Status == "queued" || dr.Status == "downloading" || dr.Status == "warning"));
 
                 if (!hasActiveDownloads)
                 {
@@ -102,6 +104,21 @@ namespace MediaBridge.Services.Media.Downloads
                 Console.WriteLine($"Updated movie {downloadRequest.Title}: {downloadPercentage}% - {downloadRequest.Status}");
             }
             await _db.SaveChangesAsync();
+        }
+        private async Task PokeRadarrDownloads()
+        {
+            string url = await _config.GetConfigValueAsync("radarr_command_endpoint");
+            await SetRadarrApiKeyAsync();
+
+            string fullUrl = url + _radarrApiKey;
+
+            var payload = new
+            {
+                name = "RefreshMonitoredDownloads",
+            };
+
+            string payloadJson = JsonSerializer.Serialize(payload);
+            await _httpClientService.PostStringAsync(fullUrl, payloadJson);         
         }
         public async Task ProcessStuckMedia()
         {
@@ -783,7 +800,7 @@ namespace MediaBridge.Services.Media.Downloads
                 {
                     parentSeries.Status = "queued";
                 }
-
+                
                 Console.WriteLine($"Updated parent series '{parentSeries.Title}': {averagePercentage}% complete ({totalEpisodes} episodes) - {parentSeries.Status}");
             }
             catch (Exception ex)
