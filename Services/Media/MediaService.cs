@@ -116,7 +116,7 @@ namespace MediaBridge.Services.Media
 
                     if (episodesInSeason.Any())
                     {
-                        string episodeSearchUrl = await _config.GetConfigValueAsync("sonarr_post_episode_search_endpoint");
+                        string episodeSearchUrl = await _config.GetConfigValueAsync("sonarr_command_endpoint");
                         string url = episodeSearchUrl + _sonarrApiKey;
 
                         var payload = new
