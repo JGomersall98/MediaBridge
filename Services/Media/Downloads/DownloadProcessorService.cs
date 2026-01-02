@@ -84,16 +84,13 @@ namespace MediaBridge.Services.Media.Downloads
                 int downloadPercentage = GetDownloadPercentage(record.Size, record.SizeLeft);      
                 Console.WriteLine($"Download percentage for movie {record.MovieId}: {downloadPercentage}%");
 
-                // Parse time left
-                int? minutesLeft = GetMinutesLeft(record.Size, record.SizeLeft, record.TimeLeft);
-                Console.WriteLine($"Estimated time left for movie {record.MovieId}: {minutesLeft} minutes");
-
                 // Update the download request
                 downloadRequest.Status = GetDownloadStatus(record.Status);
                 downloadRequest.DownloadPercentage = downloadPercentage;
-                downloadRequest.MinutesLeft = minutesLeft;
+                downloadRequest.MinutesLeft = ParseTimeLeftToMinutes(record.TimeLeft!);
                 downloadRequest.UpdatedAt = DateTime.UtcNow;
                 downloadRequest.MediaId = record.MovieId;
+
 
                 if (downloadRequest.Status == "completed" && !downloadRequest.CompletedAt.HasValue)
                 {
