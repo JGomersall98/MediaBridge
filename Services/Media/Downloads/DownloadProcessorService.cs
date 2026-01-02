@@ -87,7 +87,6 @@ namespace MediaBridge.Services.Media.Downloads
                 // Update the download request
                 downloadRequest.Status = GetDownloadStatus(record.Status);
                 downloadRequest.DownloadPercentage = downloadPercentage;
-
                 downloadRequest.MinutesLeft = ParseTimeLeftToMinutes(record.TimeLeft!);
                 downloadRequest.UpdatedAt = DateTime.UtcNow;
                 downloadRequest.MediaId = record.MovieId;
