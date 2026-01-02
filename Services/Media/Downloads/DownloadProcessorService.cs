@@ -170,14 +170,20 @@ namespace MediaBridge.Services.Media.Downloads
 
                 bool allEpisodesCompleted = showEpisodes.All(e => e.Status == "completed");
 
-                if (allEpisodesCompleted)
+                if (allEpisodesCompleted && show.MediaId.HasValue)
                 {
-                    show.Status = "completed";
-                    show.DownloadPercentage = 100;
-                    show.MinutesLeft = 0;
-                    show.CompletedAt = DateTime.UtcNow;
-                    show.UpdatedAt = DateTime.UtcNow;
-                    Console.WriteLine($"Marked show '{show.Title}' as completed since all episodes are completed.");
+                    // Check Sonarr to see if all monitored episodes are actually downloaded
+                    bool allMonitoredEpisodesDownloaded = await CheckAllMonitoredEpisodesDownloaded(show.MediaId.Value);
+                    
+                    if (allMonitoredEpisodesDownloaded)
+                    {
+                        show.Status = "completed";
+                        show.DownloadPercentage = 100;
+                        show.MinutesLeft = 0;
+                        show.CompletedAt = DateTime.UtcNow;
+                        show.UpdatedAt = DateTime.UtcNow;
+                        Console.WriteLine($"Marked show '{show.Title}' as completed since all monitored episodes are downloaded.");
+                    }
                 }
             }
 
@@ -783,10 +789,21 @@ namespace MediaBridge.Services.Media.Downloads
                 // Update status based on episodes
                 if (allEpisodesCompleted)
                 {
-                    parentSeries.Status = "completed";
-                    if (!parentSeries.CompletedAt.HasValue)
+                    // Check Sonarr to see if all monitored episodes are actually downloaded
+                    bool allMonitoredEpisodesDownloaded = await CheckAllMonitoredEpisodesDownloaded(seriesId);
+                    
+                    if (allMonitoredEpisodesDownloaded)
                     {
-                        parentSeries.CompletedAt = DateTime.UtcNow;
+                        parentSeries.Status = "completed";
+                        if (!parentSeries.CompletedAt.HasValue)
+                        {
+                            parentSeries.CompletedAt = DateTime.UtcNow;
+                        }
+                    }
+                    else
+                    {
+                        // Some monitored episodes in Sonarr are not yet downloaded
+                        parentSeries.Status = "downloading";
                     }
                 }
                 else if (allSeriesEpisodes.Any(e => e.Status == "downloading"))
@@ -803,6 +820,39 @@ namespace MediaBridge.Services.Media.Downloads
             catch (Exception ex)
             {
                 Console.WriteLine($"Error updating parent series progress for seriesId {seriesId}: {ex.Message}");
+            }
+        }
+        private async Task<bool> CheckAllMonitoredEpisodesDownloaded(int seriesId)
+        {
+            try
+            {
+                // Query Sonarr for the series data
+                string seriesApiUrl = await BuildSonarrSeriesDataUrl(seriesId.ToString());
+                string seriesResponse = await _httpClientService.GetStringAsync(seriesApiUrl);
+                SonarrShowsDetailList seriesData = System.Text.Json.JsonSerializer.Deserialize<SonarrShowsDetailList>(seriesResponse)!;
+
+                if (seriesData == null || seriesData.Statistics == null)
+                {
+                    Console.WriteLine($"Could not retrieve series statistics for seriesId {seriesId}");
+                    return false;
+                }
+
+                // Check if all monitored episodes are downloaded
+                // EpisodeFileCount represents the number of episode files downloaded
+                // EpisodeCount represents the number of monitored episodes
+                int downloadedEpisodes = seriesData.Statistics.EpisodeFileCount;
+                int monitoredEpisodes = seriesData.Statistics.EpisodeCount;
+
+                Console.WriteLine($"Series {seriesId}: {downloadedEpisodes} of {monitoredEpisodes} monitored episodes downloaded");
+
+                // All monitored episodes are downloaded when the counts match
+                return downloadedEpisodes >= monitoredEpisodes && monitoredEpisodes > 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error checking monitored episodes for seriesId {seriesId}: {ex.Message}");
+                // On error, return false to avoid incorrectly marking as complete
+                return false;
             }
         }
         private int? ParseTimeLeftToMinutes(string timeLeft)
