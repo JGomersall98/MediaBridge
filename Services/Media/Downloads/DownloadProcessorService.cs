@@ -28,7 +28,7 @@ namespace MediaBridge.Services.Media.Downloads
         }
         public async Task ProcessRadarrQueue()
         {
-            await PokeRadarrDownloads();
+            await PokeMediaDownloads(true);
             try
             {
                 bool hasActiveDownloads = await _db.DownloadRequests
@@ -102,12 +102,21 @@ namespace MediaBridge.Services.Media.Downloads
             }
             await _db.SaveChangesAsync();
         }
-        private async Task PokeRadarrDownloads()
+        private async Task PokeMediaDownloads(bool isMovie)
         {
-            string url = await _config.GetConfigValueAsync("radarr_command_endpoint");
-            await SetRadarrApiKeyAsync();
-
-            string fullUrl = url + _radarrApiKey;
+            string url = "";
+            if(isMovie)
+            {
+                url = await _config.GetConfigValueAsync("radarr_command_endpoint");
+                await SetRadarrApiKeyAsync();
+                url = url + _radarrApiKey;
+            }
+            else
+            {
+                url = await _config.GetConfigValueAsync("sonarr_command_endpoint");
+                await SetSonarrApiKeyAsync();
+                url = url + _sonarrApiKey;
+            }
 
             var payload = new
             {
@@ -115,7 +124,7 @@ namespace MediaBridge.Services.Media.Downloads
             };
 
             string payloadJson = JsonSerializer.Serialize(payload);
-            await _httpClientService.PostStringAsync(fullUrl, payloadJson);         
+            await _httpClientService.PostStringAsync(url, payloadJson);         
         }
         public async Task ProcessStuckMedia()
         {
@@ -165,8 +174,10 @@ namespace MediaBridge.Services.Media.Downloads
             foreach (var show in downloadingShows)
             {
                 List<DownloadRequests> showEpisodes = await _db.DownloadRequests
-                    .Where(dr => dr.MediaType == "Episode" && dr.MediaId == show.MediaId)
+                    .Where(dr => dr.MediaType == "Episode" && dr.TvdbId == show.TvdbId)
                     .ToListAsync();
+
+                show.MediaId = showEpisodes.FirstOrDefault()?.MediaId;
 
                 bool allEpisodesCompleted = showEpisodes.All(e => e.Status == "completed");
 
@@ -176,7 +187,7 @@ namespace MediaBridge.Services.Media.Downloads
                     show.DownloadPercentage = 100;
                     show.MinutesLeft = 0;
                     show.CompletedAt = DateTime.UtcNow;
-                    show.UpdatedAt = DateTime.UtcNow;
+                    show.UpdatedAt = DateTime.UtcNow;                
                     Console.WriteLine($"Marked show '{show.Title}' as completed since all episodes are completed.");
                 }
             }
@@ -192,6 +203,7 @@ namespace MediaBridge.Services.Media.Downloads
         }
         public async Task ProcessSonarrQueue()
         {
+            await PokeMediaDownloads(false);
             try
             {
                 bool hasActiveDownloads = await _db.DownloadRequests
@@ -234,7 +246,7 @@ namespace MediaBridge.Services.Media.Downloads
                             await RemoveSonnarrItem(queueItem!.Id);
 
                             // Call post to search for episode again
-                            string episodeSearchUrl = await _config.GetConfigValueAsync("sonarr_post_episode_search_endpoint");
+                            string episodeSearchUrl = await _config.GetConfigValueAsync("sonarr_command_endpoint");
                             string url = episodeSearchUrl + _sonarrApiKey;
 
                             int episodeId = queueItem.EpisodeId!.Value;
