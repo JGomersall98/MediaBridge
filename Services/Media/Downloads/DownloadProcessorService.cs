@@ -51,6 +51,43 @@ namespace MediaBridge.Services.Media.Downloads
                     return;
                 }
 
+
+                // Check Torrent Health in QBittorent
+                List<string> torrentsToDelete = await CheckTorrentHealth(queueData.Records
+                    .Where(r => !string.IsNullOrEmpty(r.TorrentId))
+                    .Select(r => r.TorrentId!)
+                    .ToList());
+
+                if (torrentsToDelete.Any())
+                {
+                    foreach (var torrentId in torrentsToDelete)
+                    {
+                        // get Id of Radarr queue item from torrentId
+                        var queueItem = queueData.Records.FirstOrDefault(r =>
+                            string.Equals(r.TorrentId, torrentId, StringComparison.OrdinalIgnoreCase));
+
+                        if (queueItem != null)
+                        {
+                            await RemoveMediaItem(queueItem!.Id, true);
+
+                            // Call post to search for movie again
+                            string movieSearchUrl = await _config.GetConfigValueAsync("radarr_command_endpoint");
+                            string url = movieSearchUrl + _radarrApiKey;
+
+                            int movieId = queueItem.MovieId!.Value;
+
+                            var payload = new
+                            {
+                                name = "MoviesSearch",
+                                movieIds = new List<int> { movieId }
+                            };
+
+                            string payloadJson = JsonSerializer.Serialize(payload);
+                            HttpResponseString movieSearchResponse = await _httpClientService.PostStringAsync(url, payloadJson);
+                        }
+                    }
+                }
+
                 Console.WriteLine($"Found {queueData.Records.Count} items in Radarr queue.");
 
                 await ProcessRadarrQueueItems(queueData.Records);
@@ -243,7 +280,7 @@ namespace MediaBridge.Services.Media.Downloads
 
                         if (queueItem != null)
                         {
-                            await RemoveSonnarrItem(queueItem!.Id);
+                            await RemoveMediaItem(queueItem!.Id, false);
 
                             // Call post to search for episode again
                             string episodeSearchUrl = await _config.GetConfigValueAsync("sonarr_command_endpoint");
@@ -307,22 +344,27 @@ namespace MediaBridge.Services.Media.Downloads
             return torrentsToCull;
 
         }
-        private async Task<bool> RemoveSonnarrItem(int queueId)
+        private async Task<bool> RemoveMediaItem(int queueId, bool isMovie)
         {
-            string baseUrl = await _config.GetConfigValueAsync("sonarr_remove_queue_item_endpoint");
-
-            await SetSonarrApiKeyAsync();
-
-            string apiUrl = baseUrl!.Replace("{ApiKey}", _sonarrApiKey!)
-                                   .Replace("{id}", queueId.ToString());
-
+            string baseUrl = "";
+            if(isMovie)
+            {
+                baseUrl = await _config.GetConfigValueAsync("radarr_remove_queue_item_endpoint");
+                await SetRadarrApiKeyAsync();
+                baseUrl = baseUrl!.Replace("{ApiKey}", _radarrApiKey!);
+            }
+            else
+            {
+                baseUrl = await _config.GetConfigValueAsync("sonarr_remove_queue_item_endpoint");
+                await SetSonarrApiKeyAsync();
+                baseUrl = baseUrl!.Replace("{ApiKey}", _sonarrApiKey!);
+            }
+            string apiUrl = baseUrl.Replace("{id}", queueId.ToString());
             var response = await _httpClientService.DeleteStringAsync(apiUrl);
-
             if (response == "DELETE request failed.")
             {
                 return false;
             }
-
             return true;
         }
         private async Task<string> GetQBitorrentCookie()
@@ -368,8 +410,8 @@ namespace MediaBridge.Services.Media.Downloads
             // If it has any seeds, don’t cull
             if (t.NumSeeds > 0) return false;
 
-            // If it has any incomplete peers, don’t cull
-            if (t.Availability > 0) return false;
+            // If availability of torrent is low, cull
+            if (t.Availability > 0.3) return false; // Got to be harsh, if other checks pass
 
             return true;
         }
@@ -997,6 +1039,10 @@ namespace MediaBridge.Services.Media.Downloads
 
         [JsonPropertyName("timeleft")]
         public string? TimeLeft { get; set; }
+        [JsonPropertyName("downloadId")]
+        public string? TorrentId { get; set; }
+        [JsonPropertyName("id")]
+        public int Id { get; set; }
     }
     public class RadarrMovieId
     {
