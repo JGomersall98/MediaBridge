@@ -829,7 +829,7 @@ namespace MediaBridge.Services.Media.Downloads
                 // Query Sonarr for the series data
                 string seriesApiUrl = await BuildSonarrSeriesDataUrl(seriesId.ToString());
                 string seriesResponse = await _httpClientService.GetStringAsync(seriesApiUrl);
-                SonarrShowsDetailList seriesData = System.Text.Json.JsonSerializer.Deserialize<SonarrShowsDetailList>(seriesResponse)!;
+                SonarrShowsDetailList? seriesData = System.Text.Json.JsonSerializer.Deserialize<SonarrShowsDetailList>(seriesResponse);
 
                 if (seriesData == null || seriesData.Statistics == null)
                 {
@@ -845,8 +845,16 @@ namespace MediaBridge.Services.Media.Downloads
 
                 Console.WriteLine($"Series {seriesId}: {downloadedEpisodes} of {monitoredEpisodes} monitored episodes downloaded");
 
+                // If there are no monitored episodes, the series should not be marked as complete
+                // as it might be a series that hasn't been properly configured yet
+                if (monitoredEpisodes == 0)
+                {
+                    Console.WriteLine($"Series {seriesId} has no monitored episodes, not marking as complete");
+                    return false;
+                }
+
                 // All monitored episodes are downloaded when the counts match
-                return downloadedEpisodes >= monitoredEpisodes && monitoredEpisodes > 0;
+                return downloadedEpisodes >= monitoredEpisodes;
             }
             catch (Exception ex)
             {
