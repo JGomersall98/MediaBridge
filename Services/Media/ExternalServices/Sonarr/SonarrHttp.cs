@@ -49,7 +49,7 @@ namespace MediaBridge.Services.Media.ExternalServices.Sonarr
         // Private Methods
         private async Task<String> BuildSonarrUrl(string configKey)
         {
-            // Get Radarr URL from config
+            // Get Sonarr URL from config
             string configUrl = await _config.GetConfigValueAsync(configKey);
 
             // Ensure API key is set

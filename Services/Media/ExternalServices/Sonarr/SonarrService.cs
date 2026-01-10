@@ -15,10 +15,12 @@ namespace MediaBridge.Services.Media.ExternalServices.Sonarr
         private readonly ISonarrHttp _sonarrHttp;
         private const string SonarrAddShowKey = "sonarr_post_show_endpoint";
         private const string SonarrGetShowKey = "sonarr_get_show_endpoint";
+        
         public SonarrService(ISonarrHttp sonarrHttp)
         {
             _sonarrHttp = sonarrHttp;
         }
+
         public async Task<bool> SendShowRequest(int? tvdbId, string title, int[] seasonsRequested)
         {
             // Validate inputs
@@ -42,7 +44,6 @@ namespace MediaBridge.Services.Media.ExternalServices.Sonarr
             // Send POST request to Sonarr
             HttpResponseString response = await _sonarrHttp.SonarrHttpPost(SonarrAddShowKey, payload);
 
-            // Return status
             return response.IsSuccess;
         }
         public async Task<ShowDetailsResponse?> GetShowDetails(int? tvdbId)

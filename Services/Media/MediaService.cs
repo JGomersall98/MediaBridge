@@ -10,7 +10,6 @@ using MediaBridge.Services.Helpers;
 using MediaBridge.Services.Media.Downloads;
 using MediaBridge.Services.Media.ExternalServices.Radarr;
 using MediaBridge.Services.Media.ExternalServices.Sonarr;
-using Microsoft.AspNetCore.Mvc.Formatters;
 
 namespace MediaBridge.Services.Media
 {
@@ -18,7 +17,6 @@ namespace MediaBridge.Services.Media
     {
         private readonly IGetConfig _config;
         private readonly IHttpClientService _httpClientService;
-        private string? _radarrApiKey;
         private string? _sonarrApiKey;
         private readonly JsonSerializerOptions _jsonOptions;
         private readonly MediaBridgeDbContext _db;
@@ -50,7 +48,6 @@ namespace MediaBridge.Services.Media
                     // Send movie request to Radarr
                     response.IsSuccess = await _radarrService.SendMovieRequest(movieDetails.Title, movieDetails.TmdbId);
 
-                    // Process the result
                     await ProcessMediaRequestResult(userId, username, movieDetails, null, response.IsSuccess);
                 }
                 else if (mediaType == "show")
@@ -61,7 +58,6 @@ namespace MediaBridge.Services.Media
                     // Send show request to Sonarr
                     response.IsSuccess = await _sonarrService.SendShowRequest(showDetails!.TvdbId, showDetails.Title!, seasonsRequested!);
 
-                    // Process the result
                     await ProcessMediaRequestResult(userId, username, null, showDetails, response.IsSuccess);
                 }
             }
@@ -86,7 +82,6 @@ namespace MediaBridge.Services.Media
                 response.Reason = $"Failed sending {mediaType} request: Unknown error.";
             }
 
-            // Return the response
             return response;
         }    
         private async Task ProcessMediaRequestResult(int userId, string username, MovieDetailsResponse? movieDetails, ShowDetailsResponse? showDetails, bool success)
@@ -97,7 +92,6 @@ namespace MediaBridge.Services.Media
                 await LogMediaRequest(userId, username, movieDetails.TmdbId, null, "movie", movieDetails.Title!, true, null);
                 if (success)
                 {
-                    // Add to Download Requests
                     await AddToDownloadRequests(movieDetails, null, userId);
                 }
             }
@@ -107,7 +101,6 @@ namespace MediaBridge.Services.Media
                 await LogMediaRequest(userId, username, null, showDetails.TvdbId, "show", showDetails.Title!, true, null);
                 if (success)
                 {
-                    // Add to Download Requests
                     await AddToDownloadRequests(null, showDetails, userId);
                 }
             }

@@ -83,7 +83,7 @@ namespace MediaBridge.Services.Media.Downloads
                             };
 
                             string payloadJson = JsonSerializer.Serialize(payload);
-                            HttpResponseString movieSearchResponse = await _httpClientService.PostAsync(url, payloadJson);
+                            await _httpClientService.PostAsync(url, payloadJson);
                         }
                     }
                 }
@@ -295,7 +295,7 @@ namespace MediaBridge.Services.Media.Downloads
                             };
 
                             string payloadJson = JsonSerializer.Serialize(payload);
-                            HttpResponseString episodeSearchResponse = await _httpClientService.PostAsync(url, payloadJson);
+                            await _httpClientService.PostAsync(url, payloadJson);
 
                         }
                     }
