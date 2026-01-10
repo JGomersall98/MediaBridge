@@ -9,7 +9,8 @@ namespace MediaBridge.Services.Helpers
     {
         Task<string> GetStringAsync(string url);
         Task<string> GetStringAsync(string url, Dictionary<string, string> headers);
-        Task<HttpResponseString> PostStringAsync(string url, string jsonBody);
+        Task<HttpResponseString> GetAsync(string url);
+        Task<HttpResponseString> PostAsync(string url, string jsonBody);
         Task<HttpResponseString> PostFormUrlEncodedAsync(string url, Dictionary<string, string> formData);
         Task<string> DeleteStringAsync(string url);
     }
@@ -22,6 +23,23 @@ namespace MediaBridge.Services.Helpers
         {
             _httpClient = httpClient;
             _logger = logger;
+        }
+        public async Task<HttpResponseString> GetAsync(string url)
+        {
+            HttpResponseString getResponse = new HttpResponseString();
+            try
+            {
+                _logger.LogInformation("GET request to: {Url}", url);
+                var response = await _httpClient.GetAsync(url);
+                getResponse.IsSuccess = response.IsSuccessStatusCode;
+                getResponse.Response = await response.Content.ReadAsStringAsync();
+                return getResponse;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during GET request to {Url}", url);
+                throw;
+            }
         }
         public async Task<string> GetStringAsync(string url)
         {
@@ -71,7 +89,7 @@ namespace MediaBridge.Services.Helpers
                 throw;
             }
         }
-        public async Task<HttpResponseString> PostStringAsync(string url, string jsonBody)
+        public async Task<HttpResponseString> PostAsync(string url, string jsonBody)
         {
             HttpResponseString postResponse = new HttpResponseString();
             try

@@ -17,6 +17,7 @@ namespace MediaBridge.Models.Dashboard
         public string? Runtime { get; set; }
         public List<MediaSeasonItem>? Seasons { get; set; }
         public int TmdbId { get; set; }
+        public int? TvdbId { get; set; }
         public double? ImbdRating { get; set; }
         public bool? HasMedia { get; set; }
         public bool? HasPartMedia { get; set; }

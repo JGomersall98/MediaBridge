@@ -1,10 +1,15 @@
-﻿using System.Text.Json;
+﻿using System.Runtime.CompilerServices;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using MediaBridge.Database;
 using MediaBridge.Database.DB_Models;
 using MediaBridge.Models;
+using MediaBridge.Models.Media.ExternalServices.Radarr;
+using MediaBridge.Models.Media.ExternalServices.Sonarr;
 using MediaBridge.Services.Helpers;
 using MediaBridge.Services.Media.Downloads;
+using MediaBridge.Services.Media.ExternalServices.Radarr;
+using MediaBridge.Services.Media.ExternalServices.Sonarr;
 
 namespace MediaBridge.Services.Media
 {
@@ -12,11 +17,12 @@ namespace MediaBridge.Services.Media
     {
         private readonly IGetConfig _config;
         private readonly IHttpClientService _httpClientService;
-        private string? _radarrApiKey;
         private string? _sonarrApiKey;
         private readonly JsonSerializerOptions _jsonOptions;
         private readonly MediaBridgeDbContext _db;
-        public MediaService(IGetConfig config, IHttpClientService httpClientService, MediaBridgeDbContext db)
+        private readonly IRadarrService _radarrService;
+        private readonly ISonarrService _sonarrService;
+        public MediaService(IGetConfig config, IHttpClientService httpClientService, MediaBridgeDbContext db, IRadarrService radarrService, ISonarrService sonarrService)
         {
             _config = config;
             _httpClientService = httpClientService;
@@ -25,61 +31,105 @@ namespace MediaBridge.Services.Media
                 PropertyNameCaseInsensitive = true
             };
             _db = db;
+            _radarrService = radarrService;
+            _sonarrService = sonarrService;
         }
-        public async Task<StandardResponse> DownloadMedia(int tmbId, int userId, string username, int[]? seasonsRequested, string mediaType)
+        public async Task<StandardResponse> DownloadMedia(int mediaId, int userId, string username, int[]? seasonsRequested, string mediaType)
         {
             StandardResponse response = new StandardResponse();
 
-            RSGetMediaResponse mediaDetails = await GetMediaDetails(tmbId, mediaType);
-
-            HttpResponseString requestResponse = new HttpResponseString();
-
-            if (mediaType == "movie")
+            try
             {
-                requestResponse = await SendMovieRequest(mediaDetails);
-            }
-            else if (mediaType == "show")
-            {
-                if (seasonsRequested == null)
+                if (mediaType == "movie")
                 {
-                    response.Reason = "No Seasons Requested.";
-                    response.IsSuccess = false;
-                    return response;
-                }
-                requestResponse = await SendShowRequest(mediaDetails, seasonsRequested);
-            }
+                    // Get Movie Details from Radarr
+                    MovieDetailsResponse movieDetails = await _radarrService.GetMovieDetails(mediaId);
 
-            if (!requestResponse.IsSuccess)
+                    // Send movie request to Radarr
+                    response.IsSuccess = await _radarrService.SendMovieRequest(movieDetails.Title, movieDetails.TmdbId);
+
+                    await ProcessMediaRequestResult(userId, username, movieDetails, null, response.IsSuccess);
+                }
+                else if (mediaType == "show")
+                {
+                    if (seasonsRequested == null)
+                    {
+                        response.IsSuccess = false;
+                        response.Reason = "seasonsRequested must be provided when mediaType is 'show'.";
+                        return response;
+                    }
+
+                    // Get Show Details from Sonarr
+                    ShowDetailsResponse showDetails = await _sonarrService.GetShowDetails(mediaId);
+
+                    // Send show request to Sonarr
+                    response.IsSuccess = await _sonarrService.SendShowRequest(showDetails!.TvdbId, showDetails.Title!, seasonsRequested);
+
+                    await ProcessMediaRequestResult(userId, username, null, showDetails, response.IsSuccess);
+                }
+            }
+            catch (Exception ex)
             {
-                response = await ErrorResponse(userId, username, tmbId, mediaType, mediaDetails.Title!, requestResponse.Response);
+                // Handle exceptions during request sending
+                response.IsSuccess = false;
+                response.Reason = $"Exception occurred while sending {mediaType} request: {ex.Message}";
+
+                if(mediaType == "movie")
+                    await LogMediaRequest(userId, username, mediaId, null, mediaType, "Unknown Title", false, ex.Message);
+                else if(mediaType == "show")
+                    await LogMediaRequest(userId, username, null, mediaId, mediaType, "Unknown Title", false, ex.Message);
+
                 return response;
             }
 
-            response.IsSuccess = true;
-
-            await LogMediaRequest(userId, username, tmbId, mediaType, mediaDetails.Title!, true, null);
-            await AddToDownloadRequests(mediaDetails, mediaType, userId);
+            // Handle unsuccessful response
+            if (!response.IsSuccess)
+            {
+                response.IsSuccess = false;
+                response.Reason = $"Failed sending {mediaType} request: Unknown error.";
+            }
 
             return response;
-        }      
-        public async Task<StandardResponse> PartialSeriesDownload(string imdbId, int userId, string username, int[] seasonsRequested)
-        {
-            string configUrl = await _config.GetConfigValueAsync("sonarr_get_show_endpoint");
-            if (!string.IsNullOrEmpty(configUrl)) 
+        }    
+        private async Task ProcessMediaRequestResult(int userId, string username, MovieDetailsResponse? movieDetails, ShowDetailsResponse? showDetails, bool success)
+        {           
+            if(movieDetails != null)
             {
-                configUrl = configUrl.Replace("{id}", imdbId);
+                // Process Movie Request
+                await LogMediaRequest(userId, username, movieDetails.TmdbId, null, "movie", movieDetails.Title!, true, null);
+                if (success)
+                {
+                    await AddToDownloadRequests(movieDetails, null, userId);
+                }
             }
-            await SetSonarrApiKeyAsync();
-            string apiUrl = configUrl += _sonarrApiKey;
+            else if (showDetails != null)
+            {
+                // Process Show Request
+                await LogMediaRequest(userId, username, null, showDetails.TvdbId, "show", showDetails.Title!, true, null);
+                if (success)
+                {
+                    await AddToDownloadRequests(null, showDetails, userId);
+                }
+            }
+        }
+        public async Task<StandardResponse> PartialSeriesDownload(int tvdbId, int userId, string username, int[] seasonsRequested)
+        {
 
-            string response = await _httpClientService.GetStringAsync(apiUrl);
+            string configUrl = await _config.GetConfigValueAsync("sonarr_get_show_endpoint");
+
+            await SetSonarrApiKeyAsync();
+
+            if (!string.IsNullOrEmpty(configUrl))
+            {
+                configUrl = configUrl.Replace("{id}", tvdbId.ToString());
+                configUrl = configUrl.Replace("{apiKey}", _sonarrApiKey);
+            }
+
+            string response = await _httpClientService.GetStringAsync(configUrl);
 
             List<SonarrShowDetails>? showDetails = JsonSerializer.Deserialize<List<SonarrShowDetails>>(response, _jsonOptions);
 
-            
-
-            // For the requested season numbers, set monitored to true
-            if (!showDetails.Any())
+            if (showDetails == null || !showDetails.Any())
             {
                 StandardResponse errorResponse = new StandardResponse
                 {
@@ -126,7 +176,7 @@ namespace MediaBridge.Services.Media
                         };
 
                         string payloadJson = JsonSerializer.Serialize(payload);
-                        HttpResponseString episodeSearchResponse = await _httpClientService.PostStringAsync(url, payloadJson);
+                        HttpResponseString episodeSearchResponse = await _httpClientService.PostAsync(url, payloadJson);
 
                         if (!episodeSearchResponse.IsSuccess)
                         {
@@ -138,7 +188,7 @@ namespace MediaBridge.Services.Media
                             return errorResponse;
                         }
 
-                        await LogMediaRequest(userId, username, show.TvdbId, "show", show.Title!, true, null);
+                        await LogMediaRequest(userId, username, null, show.TvdbId, "show", show.Title!, true, null);
 
                         List<DownloadRequests> existingDownload = _db.DownloadRequests
                             .Where(dr => dr.MediaType == "show" && dr.TvdbId == show.TvdbId)
@@ -147,15 +197,23 @@ namespace MediaBridge.Services.Media
                         // if no existing download request, add one
                         if (!existingDownload.Any())
                         {
-                            await AddToDownloadRequests(new RSGetMediaResponse
+                            await AddToDownloadRequests(null, new ShowDetailsResponse
                             {
-                                MediaId = show.SonarrId!.Value,
                                 TvdbId = show.TvdbId,
                                 Title = show.Title,
                                 Description = show.Description,
                                 PosterUrl = show.PosterUrl,
                                 ReleaseYear = show.ReleaseYear
-                            }, "show", userId);
+                            }, userId);
+                            //await AddToDownloadRequests(new RSGetMediaResponse
+                            //{
+                            //    MediaId = show.SonarrId!.Value,
+                            //    TvdbId = show.TvdbId,
+                            //    Title = show.Title,
+                            //    Description = show.Description,
+                            //    PosterUrl = show.PosterUrl,
+                            //    ReleaseYear = show.ReleaseYear
+                            //}, "show", userId);
                         }
                     }
                 }
@@ -186,41 +244,40 @@ namespace MediaBridge.Services.Media
             await SetSonarrApiKeyAsync();
             return baseUrl!.Replace("{ApiKey}", _sonarrApiKey!).Replace("{seriesId}", seriesId);
         }
-
-        private async Task AddToDownloadRequests(RSGetMediaResponse media, string mediaType, int userId)
+        private async Task AddToDownloadRequests(MovieDetailsResponse? movieDetails, ShowDetailsResponse? showDetails, int userId)
         {
+
             DownloadRequests downloadRequest = new DownloadRequests
             {
-                MediaId = media.MediaId,
-                TmdbId = media.TmdbId,
-                TvdbId = media.TvdbId,
                 UserId = userId,
-                MediaType = mediaType,
-                Title = media.Title,
-                Description = media.Description,
-                PosterUrl = media.PosterUrl,
-                ReleaseYear = media.ReleaseYear,
                 Status = "queued",
                 DownloadPercentage = 0,
                 RequestedAt = DateTime.UtcNow
             };
 
+            if (movieDetails != null)
+            {
+                downloadRequest.TmdbId = movieDetails.TmdbId;
+                downloadRequest.MediaType = "movie";
+                downloadRequest.Title = movieDetails.Title;
+                downloadRequest.Description = movieDetails.Description;
+                downloadRequest.PosterUrl = movieDetails.PosterUrl;
+                downloadRequest.ReleaseYear = movieDetails.ReleaseYear;
+            }
+            else if (showDetails != null)
+            {
+                downloadRequest.TvdbId = showDetails.TvdbId;
+                downloadRequest.MediaType = "show";
+                downloadRequest.Title = showDetails.Title;
+                downloadRequest.Description = showDetails.Description;
+                downloadRequest.PosterUrl = showDetails.PosterUrl;
+                downloadRequest.ReleaseYear = showDetails.ReleaseYear;
+            }
+
             _db.DownloadRequests.Add(downloadRequest);
             await _db.SaveChangesAsync();
         }
-        private async Task<StandardResponse> ErrorResponse(int userId, string username, int tmbId, string mediaType, string mediaTitle, string responseString)
-        {
-            StandardResponse response = new StandardResponse();
-            MediaErrorResponse error = JsonSerializer.Deserialize<List<MediaErrorResponse>>(responseString, _jsonOptions)!.FirstOrDefault();
-            response.IsSuccess = false;
-            response.Reason = $"Failed sending {mediaType} request: {error?.ErrorMessage ?? "Unknown error"}";
-
-            await LogMediaRequest(userId, username, tmbId, mediaType, mediaTitle, false, error?.ErrorMessage);
-
-            return response;
-        }
-
-        private async Task LogMediaRequest(int userId, string username, int tmdbId, string mediaType, string mediaTitle, bool isSuccessful, string? errorMessage)
+        private async Task LogMediaRequest(int userId, string username, int? tmdbId, int? tvdbId, string mediaType, string mediaTitle, bool isSuccessful, string? errorMessage)
         {
             try
             {
@@ -228,13 +285,20 @@ namespace MediaBridge.Services.Media
                 {
                     UserId = userId,
                     Username = username,
-                    TmdbId = tmdbId,
                     MediaType = mediaType,
                     MediaTitle = mediaTitle,
                     IsSuccessful = isSuccessful,
                     ErrorMessage = errorMessage,
                     RequestedAt = DateTime.UtcNow
                 };
+                if (mediaType == "movie")
+                {
+                    logEntry.TmdbId = tmdbId;
+                }
+                else if (mediaType == "show")
+                {
+                    logEntry.TvdbId = tvdbId;
+                }
 
                 _db.MediaRequestLogs.Add(logEntry);
                 await _db.SaveChangesAsync();
@@ -243,100 +307,7 @@ namespace MediaBridge.Services.Media
             {
                 Console.WriteLine($"Failed to log media request: {ex.Message}");
             }
-        }
-        private async Task<RSGetMediaResponse> GetMediaDetails(int tmbId, string media)
-        {
-            string apiUrl = "";
-            if (media == "movie")
-            {
-                apiUrl = await BuildApiUrl("radarr_get_movie_endpoint", "movie", tmbId);
-            }
-            else if (media == "show")
-            {
-                apiUrl = await BuildApiUrl("sonarr_get_show_endpoint", "show", tmbId);
-            }
-            string response = await _httpClientService.GetStringAsync(apiUrl);
-
-            List<RSGetMediaResponse>? movieDetailList = JsonSerializer.Deserialize<List<RSGetMediaResponse>>(response, _jsonOptions);
-            RSGetMediaResponse movieDetail = movieDetailList!.FirstOrDefault();
-            return movieDetail!;
-        }
-        private async Task<string> BuildApiUrl(string urlConfigValue, string media, int mediaId)
-        {
-            string configUrl = await _config.GetConfigValueAsync(urlConfigValue);
-            string apiKey = "";
-            if (media == "movie")
-            {
-                await SetRadarrApiKeyAsync();
-                apiKey = _radarrApiKey;
-            }
-            else if (media == "show")
-            {
-                await SetSonarrApiKeyAsync();
-                apiKey = _sonarrApiKey;
-            }
-            string apiUrl = configUrl!.Replace("{id}", mediaId.ToString()) + apiKey;
-            return apiUrl;
-        }
-        private async Task<HttpResponseString> SendMovieRequest(RSGetMediaResponse movieDetails)
-        {
-            string configUrl = await _config.GetConfigValueAsync("radarr_post_movie_endpoint");
-
-            await SetRadarrApiKeyAsync();
-
-            string payload = JsonSerializer.Serialize(new RadarrAddMovieRequest
-            {
-                Title = movieDetails.Title,
-                TmdbId = movieDetails.TmdbId,
-                ImdbId = movieDetails.ImdbId,
-                TitleSlug = movieDetails.TitleSlug
-            });
-
-            HttpResponseString response = await _httpClientService.PostStringAsync(configUrl + _radarrApiKey, payload);
-            return response;
-        }
-        private async Task<HttpResponseString> SendShowRequest(RSGetMediaResponse movieDetails, int[] seasonsRequested)
-        {
-            string configUrl = await _config.GetConfigValueAsync("sonarr_post_show_endpoint");
-
-            await SetSonarrApiKeyAsync();
-
-            List<Season> seasonList = new List<Season>();
-
-            foreach (var seasonItem in seasonsRequested)
-            {
-                Season season = new Season()
-                {
-                    SeasonNumber = seasonItem,
-                    Monitored = true
-                };
-                seasonList.Add(season);
-            }
-
-            string payload = JsonSerializer.Serialize(new SonarrAddShowRequest
-            {
-                Title = movieDetails.Title,
-                TvdbId = movieDetails.TvdbId,
-                TitleSlug = movieDetails.TitleSlug,
-                Seasons = seasonList
-            });
-
-            HttpResponseString response = await _httpClientService.PostStringAsync(configUrl + _sonarrApiKey, payload);
-            return response;
-        }
-
-        private async Task SetRadarrApiKeyAsync()
-        {
-            if (string.IsNullOrEmpty(_radarrApiKey))
-            {
-                var apiKey = await _config.GetConfigValueAsync("radarr_api_key");
-                if (string.IsNullOrEmpty(apiKey))
-                {
-                    throw new InvalidOperationException("radarr_api_key not found in configuration.");
-                }
-                _radarrApiKey = apiKey;
-            }
-        }
+        }      
         private async Task SetSonarrApiKeyAsync()
         {
             if (string.IsNullOrEmpty(_sonarrApiKey))
@@ -350,61 +321,6 @@ namespace MediaBridge.Services.Media
             }
         }
     }
-    public class RSGetMediaResponse
-    {
-        [JsonPropertyName("id")]
-        public int MediaId { get; set; }
-        [JsonPropertyName("title")]
-        public string? Title { get; set; }
-        [JsonPropertyName("overview")]
-        public string? Description { get; set; }
-        [JsonPropertyName("tmdbId")]
-        public int? TmdbId { get; set; } // Movie
-        [JsonPropertyName("tvdbId")]
-        public int? TvdbId { get; set; } // Tv Show
-        [JsonPropertyName("imdbId")]
-        public string? ImdbId { get; set; }
-        [JsonPropertyName("titleSlug")]
-        public string? TitleSlug { get; set; }
-        [JsonPropertyName("remotePoster")]
-        public string? PosterUrl { get; set; }
-        [JsonPropertyName("year")]
-        public int? ReleaseYear { get; set; }
-    }
-    public class RadarrAddMovieRequest
-    {
-        public string? Title { get; set; }
-        public int? TmdbId { get; set; }
-        public string? ImdbId { get; set; }
-        public string? TitleSlug { get; set; }
-        public int QualityProfileId { get; set; } = 1;
-        public string? RootFolderPath { get; set; } = "/mnt/server/Movies";
-        public bool Monitored { get; set; } = true;
-        public string? MinimumAvailability { get; set; } = "released";
-        public AddOptions? AddOptions { get; set; } = new AddOptions { SearchForMovie = true };
-    }
-    public class SonarrAddShowRequest
-    {
-        public string? Title { get; set; }
-        public string? TitleSlug { get; set; }
-        public int? TvdbId { get; set; }
-        public int QualityProfileId { get; set; } = 1;
-        public string? RootFolderPath { get; set; } = "/mnt/server/TV Shows";
-        public bool Monitored { get; set; } = true;
-        public List<Season>? Seasons { get; set; }
-        public AddOptions? AddOptions { get; set; } = new AddOptions { SearchForMissingEpisodes = true, 
-                                                                        SearchForCutoffUnmetEpisodes = true };
-    }
-    public class AddOptions
-    {
-        public bool? SearchForMovie { get; set; } = true;
-        public bool? SearchForMissingEpisodes { get; set; } = true;
-        public bool? SearchForCutoffUnmetEpisodes { get; set; } = true;
-    }
-    public class MediaErrorResponse
-    {
-        public string? ErrorMessage { get; set; }
-    }
     public class Season
     {
         public int? SeasonNumber { get; set; }
@@ -417,7 +333,6 @@ namespace MediaBridge.Services.Media
         [JsonPropertyName("tvdbId")]
         public int TvdbId { get; set; }
         public string? Title { get; set; }
-        public string? TitleSlug { get; set; }
         public List<Season>? Seasons { get; set; }
         [JsonPropertyName("overview")]
         public string? Description { get; set; }

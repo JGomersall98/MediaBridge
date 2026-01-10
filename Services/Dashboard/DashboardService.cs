@@ -128,7 +128,7 @@ namespace MediaBridge.Services.Dashboard
             string movieUrl = await BuildTmbdIdInfoEndpoint(mediaType);
 
             // Make the POST request using the correct IHttpClientService method
-            var httpResponse = await _httpClientService.PostStringAsync(movieUrl, jsonBody);
+            var httpResponse = await _httpClientService.PostAsync(movieUrl, jsonBody);
 
             // deserialize the response
             List<MediaMovieInfo> mediaMovieInfos = JsonSerializer.Deserialize<List<MediaMovieInfo>>(httpResponse.Response, _jsonOptions);
@@ -168,7 +168,8 @@ namespace MediaBridge.Services.Dashboard
             string url = await _config.GetConfigValueAsync("radarr_get_movie_endpoint");
             string apiKey = await _config.GetConfigValueAsync("radarr_api_key");
 
-            string fullUrl = url.Replace("{id}", tmdbId.ToString()) + apiKey;
+            string fullUrl = url.Replace("{id}", tmdbId.ToString());
+            fullUrl = fullUrl.Replace("{apiKey}", apiKey);
 
             var httpResponse = await _httpClientService.GetStringAsync(fullUrl);
             List<CheckReleasedResponse>? response = null;
