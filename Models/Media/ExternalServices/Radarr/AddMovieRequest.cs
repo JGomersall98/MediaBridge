@@ -1,6 +1,4 @@
-﻿using MediaBridge.Services.Media;
-
-namespace MediaBridge.Models.Media.ExternalServices.Radarr
+﻿namespace MediaBridge.Models.Media.ExternalServices.Radarr
 {
     public class AddMovieRequest
     {
@@ -9,9 +7,9 @@ namespace MediaBridge.Models.Media.ExternalServices.Radarr
         public int QualityProfileId { get; set; } = 1;
         public string RootFolderPath { get; set; } = "/mnt/server/Movies";
         public bool Monitored { get; set; } = true;
-        public AddOptions AddOptions { get; set; } = new AddOptions { SearchForMovie = true };
+        public AddOptionsRadarr AddOptions { get; set; } = new AddOptionsRadarr { SearchForMovie = true };
     }
-    public class AddOptions
+    public class AddOptionsRadarr
     {
         public bool SearchForMovie { get; set; } = true;
     }

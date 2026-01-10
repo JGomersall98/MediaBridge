@@ -13,12 +13,17 @@ namespace MediaBridge.Services.Media.ExternalServices.Sonarr
     public class SonarrService : ISonarrService
     {
         private readonly ISonarrHttp _sonarrHttp;
+        private readonly JsonSerializerOptions _jsonOptions;
         private const string SonarrAddShowKey = "sonarr_post_show_endpoint";
         private const string SonarrGetShowKey = "sonarr_get_show_endpoint";
         
         public SonarrService(ISonarrHttp sonarrHttp)
         {
             _sonarrHttp = sonarrHttp;
+            _jsonOptions = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            };
         }
 
         public async Task<bool> SendShowRequest(int? tvdbId, string title, int[] seasonsRequested)
@@ -56,14 +61,14 @@ namespace MediaBridge.Services.Media.ExternalServices.Sonarr
             HttpResponseString response = await _sonarrHttp.SonarrHttpGet(SonarrGetShowKey, tvdbId.Value);
 
             // Deserialize response
-            List<ShowDetailsResponse>? showDetailList = JsonSerializer.Deserialize<List<ShowDetailsResponse>>(response.Response);
+            List<ShowDetailsResponse>? showDetailList = JsonSerializer.Deserialize<List<ShowDetailsResponse>>(response.Response, _jsonOptions);
 
             // Validate response
             if (showDetailList == null || showDetailList.Count == 0)
                 throw new InvalidOperationException($"No show details found for TVDB ID: {tvdbId}");
 
             // Get first show detail
-            ShowDetailsResponse? showDetail = showDetailList?.FirstOrDefault();
+            ShowDetailsResponse? showDetail = showDetailList.FirstOrDefault();
 
             return showDetail;
         }

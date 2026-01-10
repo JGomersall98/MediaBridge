@@ -12,12 +12,17 @@ namespace MediaBridge.Services.Media.ExternalServices.Radarr
     public class RadarrService : IRadarrService
     {
         private readonly IRadarrHttp _radarrHttp;
+        private readonly JsonSerializerOptions _jsonOptions;
         private const string RadarrAddMovieKey = "radarr_post_movie_endpoint";
         private const string RadarrGetMovieKey = "radarr_get_movie_endpoint";
 
         public RadarrService(IRadarrHttp radarrHttp)
         {
             _radarrHttp = radarrHttp;
+            _jsonOptions = new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            };
         }
         public async Task<bool> SendMovieRequest(string? title, int? tmdbId)
         {
@@ -50,14 +55,14 @@ namespace MediaBridge.Services.Media.ExternalServices.Radarr
             HttpResponseString response = await _radarrHttp.RadarrHttpGet(RadarrGetMovieKey, tmdbId.Value);
 
             // Deserialize response
-            List<MovieDetailsResponse>? movieDetailList = JsonSerializer.Deserialize<List<MovieDetailsResponse>>(response.Response);
+            List<MovieDetailsResponse>? movieDetailList = JsonSerializer.Deserialize<List<MovieDetailsResponse>>(response.Response, _jsonOptions);
 
             // Validate response
             if (movieDetailList == null || movieDetailList.Count == 0)
                 throw new InvalidOperationException("No movie details found for the provided TMDB ID.");
 
             // Get first movie detail
-            MovieDetailsResponse movieDetail = movieDetailList!.FirstOrDefault()!;
+            MovieDetailsResponse movieDetail = movieDetailList[0];
 
             return movieDetail;
         }

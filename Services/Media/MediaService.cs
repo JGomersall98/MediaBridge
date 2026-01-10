@@ -52,11 +52,18 @@ namespace MediaBridge.Services.Media
                 }
                 else if (mediaType == "show")
                 {
+                    if (seasonsRequested == null)
+                    {
+                        response.IsSuccess = false;
+                        response.Reason = "seasonsRequested must be provided when mediaType is 'show'.";
+                        return response;
+                    }
+
                     // Get Show Details from Sonarr
                     ShowDetailsResponse showDetails = await _sonarrService.GetShowDetails(mediaId);
 
                     // Send show request to Sonarr
-                    response.IsSuccess = await _sonarrService.SendShowRequest(showDetails!.TvdbId, showDetails.Title!, seasonsRequested!);
+                    response.IsSuccess = await _sonarrService.SendShowRequest(showDetails!.TvdbId, showDetails.Title!, seasonsRequested);
 
                     await ProcessMediaRequestResult(userId, username, null, showDetails, response.IsSuccess);
                 }
@@ -105,7 +112,7 @@ namespace MediaBridge.Services.Media
                 }
             }
         }
-        public async Task<StandardResponse> PartialSeriesDownload(int tvdbid, int userId, string username, int[] seasonsRequested)
+        public async Task<StandardResponse> PartialSeriesDownload(int tvdbId, int userId, string username, int[] seasonsRequested)
         {
 
             string configUrl = await _config.GetConfigValueAsync("sonarr_get_show_endpoint");
@@ -114,15 +121,15 @@ namespace MediaBridge.Services.Media
 
             if (!string.IsNullOrEmpty(configUrl))
             {
-                configUrl = configUrl.Replace("{id}", tvdbid.ToString());
+                configUrl = configUrl.Replace("{id}", tvdbId.ToString());
                 configUrl = configUrl.Replace("{apiKey}", _sonarrApiKey);
             }
 
             string response = await _httpClientService.GetStringAsync(configUrl);
 
-            List<SonarrShowDetails>? showDetails = JsonSerializer.Deserialize<List<SonarrShowDetails>>(response, _jsonOptions);           
+            List<SonarrShowDetails>? showDetails = JsonSerializer.Deserialize<List<SonarrShowDetails>>(response, _jsonOptions);
 
-            if (!showDetails!.Any())
+            if (showDetails == null || !showDetails.Any())
             {
                 StandardResponse errorResponse = new StandardResponse
                 {
