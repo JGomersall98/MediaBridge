@@ -4,6 +4,7 @@ using MediaBridge.Database;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace MediaBridge.Migrations
 {
     [DbContext(typeof(MediaBridgeDbContext))]
-    partial class MediaBridgeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260104141922_extra_column_request_logging_table")]
+    partial class extra_column_request_logging_table
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
