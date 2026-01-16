@@ -144,7 +144,12 @@ namespace MediaBridge.Services.Dashboard
             {
                 var info = mediaMovieInfos.FirstOrDefault(m => m.InfoIds!.ImdbId == movie.ImdbId);
 
-                bool isReleased = await CheckReleased(info!.InfoIds!.TmdbId, movie.Title);
+                if (info == null)
+                {
+                    continue;
+                }
+
+                bool isReleased = await CheckReleased(info!.InfoIds!.TmdbId.Value, movie.Title);
                 if (!isReleased)
                 {
                     continue;
@@ -152,7 +157,7 @@ namespace MediaBridge.Services.Dashboard
 
                 if (info != null)
                 {
-                    movie.TmdbId = info.InfoIds!.TmdbId;
+                    movie.TmdbId = info.InfoIds!.TmdbId.Value;
                     movie.ImbdRating = GetImdbRatingFromRatingsList(mediaMovieInfos, info);
                     movie.Description = info.Description;
                     movie.ReleaseYear = info.Year;
