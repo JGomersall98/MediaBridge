@@ -6,7 +6,6 @@ using MediaBridge.Models.Dashboard;
 using MediaBridge.Models.Search;
 using MediaBridge.Services.Helpers;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.OpenApi.Services;
 
 namespace MediaBridge.Services.Media
 {
@@ -21,7 +20,7 @@ namespace MediaBridge.Services.Media
         private const string SEARCH_ENDPOINT_KEY = "mdblist_search_endpont";
         private const string INFO_ENDPOINT_KEY = "mdblist_info_endpoint";
 
-        public SearchService(IGetConfig config, IHttpClientService httpClientService, 
+        public SearchService(IGetConfig config, IHttpClientService httpClientService,
             IUtilService utilService, MediaBridgeDbContext db)
         {
             _config = config;
@@ -97,7 +96,7 @@ namespace MediaBridge.Services.Media
         {
             string url = await _config.GetConfigValueAsync("tmdb_release_date_endpoint");
             string apiKey = await _config.GetConfigValueAsync("tmdb_api_key");
-            
+
             foreach (var mediaItem in mediaItems)
             {
                 string releaseDateUrl = BuildTmdbReleaseDateUrl(mediaType, mediaItem.TmdbId, apiKey!);
@@ -127,8 +126,11 @@ namespace MediaBridge.Services.Media
                     continue;
                 }
 
-               if(releaseData.Any(rpr => rpr.ReleaseData != null && rpr.ReleaseData!
-                    .Any(rd => rd.Type == TmdbReleaseType.Digital || rd.Type == TmdbReleaseType.Physical || rd.Type == TmdbReleaseType.TV)))
+                if (releaseData.Any(rpr => rpr.ReleaseData != null && rpr.ReleaseData!
+                     .Any(rd => (rd.Type == TmdbReleaseType.Digital || rd.Type == TmdbReleaseType.Physical || rd.Type == TmdbReleaseType.TV)
+                                && !string.IsNullOrEmpty(rd.ReleaseDate)
+                                && DateTime.TryParse(rd.ReleaseDate, out DateTime releaseDate)
+                                && releaseDate <= DateTime.UtcNow)))
                 {
                     mediaItem.MediaAvailability = new MediaAvailability
                     {
@@ -152,7 +154,6 @@ namespace MediaBridge.Services.Media
                         NotReleased = notReleased,
                         English = IsEnglish(releaseData),
                     };
-                    
                 }
             }
 
@@ -188,7 +189,7 @@ namespace MediaBridge.Services.Media
         }
         private async Task<List<MediaItem>> AlreadyExistingMovies(List<MediaItem> mediaItems)
         {
-            List<DownloadedMovies> existingMovies = await _db.DownloadedMovies.AsNoTracking().ToListAsync();          
+            List<DownloadedMovies> existingMovies = await _db.DownloadedMovies.AsNoTracking().ToListAsync();
 
             foreach (var movie in mediaItems)
             {
@@ -228,7 +229,7 @@ namespace MediaBridge.Services.Media
                                 // Season is downloaded in full
                                 season.HasFile = true;
                             }
-                            else if(existingSeason.EpisodesDownloaded! <= 0)
+                            else if (existingSeason.EpisodesDownloaded! <= 0)
                             {
                                 // Season exists but no episodes are downloaded
                                 season.HasFile = false;
@@ -247,7 +248,7 @@ namespace MediaBridge.Services.Media
                         }
                     }
                 }
-            
+
                 // Mark HasMedia as true if all episodes of all non-special seasons are downloaded
                 if (show.Seasons != null)
                 {
@@ -547,7 +548,7 @@ namespace MediaBridge.Services.Media
     public class ResultsPerRegion
     {
         [JsonPropertyName("iso_3166_1")]
-        public string? CountryCode  { get; set; }
+        public string? CountryCode { get; set; }
         [JsonPropertyName("release_dates")]
         public List<TmdbReleaseDates>? ReleaseData { get; set; }
     }
@@ -555,6 +556,9 @@ namespace MediaBridge.Services.Media
     {
         [JsonPropertyName("type")]
         public TmdbReleaseType Type { get; set; }
+
+        [JsonPropertyName("release_date")]
+        public string? ReleaseDate { get; set; }
     }
     public enum TmdbReleaseType
     {
@@ -569,7 +573,7 @@ namespace MediaBridge.Services.Media
         // Physical (Blu-ray/DVD) - Physical media release
         Physical = 5,
         // TV
-        TV	= 6
+        TV = 6
     }
 }
 
