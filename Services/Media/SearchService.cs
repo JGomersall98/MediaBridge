@@ -491,11 +491,11 @@ namespace MediaBridge.Services.Media
     public class InfoId
     {
         [JsonPropertyName("trakt")]
-        public int TraktId { get; set; }
+        public int? TraktId { get; set; }
         [JsonPropertyName("imdb")]
         public string? ImdbId { get; set; }
         [JsonPropertyName("tmdb")]
-        public int TmdbId { get; set; }
+        public int? TmdbId { get; set; }
 
     }
     public class Rating
