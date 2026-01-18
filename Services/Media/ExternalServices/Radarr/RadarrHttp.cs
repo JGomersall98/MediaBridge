@@ -1,75 +1,52 @@
-﻿using MediaBridge.Database.DB_Models;
+﻿using MediaBridge.Configuration;
+using MediaBridge.Database.DB_Models;
 using MediaBridge.Services.Helpers;
+using Microsoft.Extensions.Options;
 
 namespace MediaBridge.Services.Media.ExternalServices.Radarr
 {
     public interface IRadarrHttp
     {
-        Task<HttpResponseString> RadarrHttpPost(string configKey, string payload);
-        Task<HttpResponseString> RadarrHttpGet(string configKey, int id);
+        Task<HttpResponseString> RadarrHttpPost(string endpoint, string payload);
+        Task<HttpResponseString> RadarrHttpGet(string endpoint, int id);
     }
+
     public class RadarrHttp : IRadarrHttp
     {
-        private readonly IGetConfig _config;
         private readonly IHttpClientService _httpClientService;
-        private string? _radarrApiKey;
+        private readonly RadarrOptions _options;
 
-        public RadarrHttp(IGetConfig config, IHttpClientService httpClientService)
+        public RadarrHttp(IHttpClientService httpClientService, IOptions<RadarrOptions> options)
         {
-            _config = config;
             _httpClientService = httpClientService;
+            _options = options.Value;
         }
 
         // Public Methods
-        public async Task<HttpResponseString> RadarrHttpPost(string configKey, string payload)
+        public async Task<HttpResponseString> RadarrHttpPost(string endpoint, string payload)
         {
-            // Build Radarr URL
-            string url = await BuildRadarrUrl(configKey);
-
-            // Make POST request to Radarr
-            HttpResponseString response = await _httpClientService.PostAsync(url, payload);
-
-            return response;
-        }
-        public async Task<HttpResponseString> RadarrHttpGet(string configKey, int id)
-        {
-            // Build Radarr URL
-            string url = await BuildRadarrUrl(configKey);
-
-            // Replace {id} placeholder with actual id
-            url = url.Replace("{id}", id.ToString());
-
-            // Make GET request to Radarr
-            HttpResponseString response = await _httpClientService.GetAsync(url);
-
-            return response;
+            var url = BuildUrl(endpoint);
+            return await _httpClientService.PostAsync(url, payload);
         }
 
-
+        public async Task<HttpResponseString> RadarrHttpGet(string endpoint, int id)
+        {
+            // The endpoint should already have the ID replaced, so we just build the URL
+            var url = BuildUrl(endpoint);
+            return await _httpClientService.GetAsync(url);
+        }
 
         // Private Methods
-        private async Task<String> BuildRadarrUrl(string configKey)
+        private string BuildUrl(string endpointTemplate)
         {
-            // Get Radarr URL from config
-            string configUrl = await _config.GetConfigValueAsync(configKey);
+            // Start with the endpoint template
+            var url = endpointTemplate;
 
-            // Ensure API key is set
-            await SetRadarrApiKeyAsync();
+            // Replace the API key placeholder
+            url = url.Replace("{ApiKey}", _options.ApiKey);
 
-            // Replace {apiKey} placeholder with actual API key
-            return configUrl!.Replace("{apiKey}", _radarrApiKey!);
-        }
-        private async Task SetRadarrApiKeyAsync()
-        {
-            if (string.IsNullOrEmpty(_radarrApiKey))
-            {
-                var apiKey = await _config.GetConfigValueAsync("radarr_api_key");
-                if (string.IsNullOrEmpty(apiKey))
-                {
-                    throw new InvalidOperationException("radarr_api_key not found in configuration.");
-                }
-                _radarrApiKey = apiKey;
-            }
+            // Combine base URL with the endpoint
+            return $"{_options.BaseUrl.TrimEnd('/')}{url}";
         }
     }
 }

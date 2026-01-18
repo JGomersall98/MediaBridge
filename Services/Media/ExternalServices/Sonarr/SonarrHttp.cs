@@ -1,74 +1,45 @@
-﻿using MediaBridge.Services.Helpers;
+﻿using MediaBridge.Configuration;
+using MediaBridge.Services.Helpers;
+using Microsoft.Extensions.Options;
 
 namespace MediaBridge.Services.Media.ExternalServices.Sonarr
 {
     public interface ISonarrHttp
     {
-        Task<HttpResponseString> SonarrHttpPost(string configKey, string payload);
-        Task<HttpResponseString> SonarrHttpGet(string configKey, int tvdbId);
+        Task<HttpResponseString> SonarrHttpPost(string endpoint, string payload);
+        Task<HttpResponseString> SonarrHttpGet(string endpoint, int tvdbId);
     }
+
     public class SonarrHttp : ISonarrHttp
     {
-        private readonly IGetConfig _config;
         private readonly IHttpClientService _httpClientService;
-        private string? _sonarrApiKey;
+        private readonly SonarrOptions _options;
 
-        public SonarrHttp(IGetConfig config, IHttpClientService httpClientService)
+        public SonarrHttp(IHttpClientService httpClientService, IOptions<SonarrOptions> options)
         {
-            _config = config;
             _httpClientService = httpClientService;
+            _options = options.Value;
         }
 
-        // Public Methods
-        public async Task<HttpResponseString> SonarrHttpPost(string configKey, string payload)
+        public async Task<HttpResponseString> SonarrHttpPost(string endpoint, string payload)
         {
-            // Build Sonarr URL
-            string url = await BuildSonarrUrl(configKey);
-
-            // Make POST request to Sonarr
-            HttpResponseString response = await _httpClientService.PostAsync(url, payload);
-
-            return response;
-        }
-        public async Task<HttpResponseString> SonarrHttpGet(string configKey, int id)
-        {
-            // Build Sonarr URL
-            string url = await BuildSonarrUrl(configKey);
-
-            // Replace {tvdbId} placeholder with actual id
-            url = url.Replace("{id}", id.ToString());
-
-            // Make GET request to Sonarr
-            HttpResponseString response = await _httpClientService.GetAsync(url);
-
-            return response;
+            var url = BuildUrl(endpoint);
+            return await _httpClientService.PostAsync(url, payload);
         }
 
-
-
-        // Private Methods
-        private async Task<String> BuildSonarrUrl(string configKey)
+        public async Task<HttpResponseString> SonarrHttpGet(string endpoint, int id)
         {
-            // Get Sonarr URL from config
-            string configUrl = await _config.GetConfigValueAsync(configKey);
-
-            // Ensure API key is set
-            await SetSonarrApiKeyAsync();
-
-            // Replace {apiKey} placeholder with actual API key
-            return configUrl!.Replace("{apiKey}", _sonarrApiKey!);
+            var url = BuildUrl(endpoint);
+            return await _httpClientService.GetAsync(url);
         }
-        private async Task SetSonarrApiKeyAsync()
+
+        private string BuildUrl(string endpoint)
         {
-            if (string.IsNullOrEmpty(_sonarrApiKey))
-            {
-                var apiKey = await _config.GetConfigValueAsync("sonarr_api_key");
-                if (string.IsNullOrEmpty(apiKey))
-                {
-                    throw new InvalidOperationException("sonarr_api_key not found in configuration.");
-                }
-                _sonarrApiKey = apiKey;
-            }
+            // Replace the API key placeholder
+            endpoint = endpoint.Replace("{ApiKey}", _options.ApiKey);
+              
+            // Combine base URL with the endpoint
+            return _options.BaseUrl + endpoint;
         }
     }
 }

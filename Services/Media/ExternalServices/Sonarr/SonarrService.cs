@@ -1,7 +1,9 @@
 ﻿using System.Text.Json;
+using MediaBridge.Configuration;
 using MediaBridge.Database.DB_Models;
 using MediaBridge.Models.Media.ExternalServices.Sonarr;
 using MediaBridge.Services.Helpers;
+using Microsoft.Extensions.Options;
 
 namespace MediaBridge.Services.Media.ExternalServices.Sonarr
 {
@@ -10,16 +12,17 @@ namespace MediaBridge.Services.Media.ExternalServices.Sonarr
         Task<bool> SendShowRequest(int? tvdbId, string title, int[] seasonsRequested);
         Task<ShowDetailsResponse?> GetShowDetails(int? tvdbId);
     }
+
     public class SonarrService : ISonarrService
     {
         private readonly ISonarrHttp _sonarrHttp;
         private readonly JsonSerializerOptions _jsonOptions;
-        private const string SonarrAddShowKey = "sonarr_post_show_endpoint";
-        private const string SonarrGetShowKey = "sonarr_get_show_endpoint";
-        
-        public SonarrService(ISonarrHttp sonarrHttp)
+        private readonly SonarrOptions _sonarrOptions;
+
+        public SonarrService(ISonarrHttp sonarrHttp, IOptions<SonarrOptions> sonarrOptions)
         {
             _sonarrHttp = sonarrHttp;
+            _sonarrOptions = sonarrOptions.Value;
             _jsonOptions = new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
@@ -46,19 +49,26 @@ namespace MediaBridge.Services.Media.ExternalServices.Sonarr
                 Seasons = seasonList
             });
 
+            // Get endpoint and replace any placeholders if needed
+            var endpoint = _sonarrOptions.Endpoints.AddSeries;
+
             // Send POST request to Sonarr
-            HttpResponseString response = await _sonarrHttp.SonarrHttpPost(SonarrAddShowKey, payload);
+            HttpResponseString response = await _sonarrHttp.SonarrHttpPost(endpoint, payload);
 
             return response.IsSuccess;
         }
+
         public async Task<ShowDetailsResponse?> GetShowDetails(int? tvdbId)
         {
             // Validate input
             if (tvdbId == null)
                 throw new ArgumentNullException(nameof(tvdbId), "TVDB ID is required to retrieve TV show details");
 
-            // Make GET request to Sonarr
-            HttpResponseString response = await _sonarrHttp.SonarrHttpGet(SonarrGetShowKey, tvdbId.Value);
+            // Get endpoint and replace ID placeholder
+            var endpoint = _sonarrOptions.Endpoints.GetSeries.Replace("{id}", tvdbId.Value.ToString());
+
+            // Send GET request to Sonarr with the prepared endpoint
+            HttpResponseString response = await _sonarrHttp.SonarrHttpGet(endpoint, tvdbId.Value);
 
             // Deserialize response
             List<ShowDetailsResponse>? showDetailList = JsonSerializer.Deserialize<List<ShowDetailsResponse>>(response.Response, _jsonOptions);
@@ -72,6 +82,7 @@ namespace MediaBridge.Services.Media.ExternalServices.Sonarr
 
             return showDetail;
         }
+
         private List<Season> BuildSeasonPayload(int[] seasonsRequested)
         {
             List<Season> seasonList = new List<Season>();
