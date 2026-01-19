@@ -1,6 +1,8 @@
 ﻿using System.Text.Json;
+using MediaBridge.Configuration;
 using MediaBridge.Models.Media.ExternalServices.Radarr;
 using MediaBridge.Services.Helpers;
+using Microsoft.Extensions.Options;
 
 namespace MediaBridge.Services.Media.ExternalServices.Radarr
 {
@@ -9,21 +11,23 @@ namespace MediaBridge.Services.Media.ExternalServices.Radarr
         Task<bool> SendMovieRequest(string? title, int? tmdbId);
         Task<MovieDetailsResponse> GetMovieDetails(int? tmdbId);
     }
+
     public class RadarrService : IRadarrService
     {
         private readonly IRadarrHttp _radarrHttp;
         private readonly JsonSerializerOptions _jsonOptions;
-        private const string RadarrAddMovieKey = "radarr_post_movie_endpoint";
-        private const string RadarrGetMovieKey = "radarr_get_movie_endpoint";
+        private readonly RadarrOptions _radarrOptions;
 
-        public RadarrService(IRadarrHttp radarrHttp)
+        public RadarrService(IRadarrHttp radarrHttp, IOptions<RadarrOptions> radarrOptions)
         {
             _radarrHttp = radarrHttp;
+            _radarrOptions = radarrOptions.Value;
             _jsonOptions = new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
             };
         }
+
         public async Task<bool> SendMovieRequest(string? title, int? tmdbId)
         {
             // Validate inputs
@@ -40,19 +44,26 @@ namespace MediaBridge.Services.Media.ExternalServices.Radarr
                 TmdbId = tmdbId
             });
 
+            // Get endpoint and replace any placeholders if needed
+            var endpoint = _radarrOptions.Endpoints.AddMovie;
+
             // Send POST request to Radarr
-            HttpResponseString response = await _radarrHttp.RadarrHttpPost(RadarrAddMovieKey, payload);
+            HttpResponseString response = await _radarrHttp.RadarrHttpPost(endpoint, payload);
 
             return response.IsSuccess;
         }
+
         public async Task<MovieDetailsResponse> GetMovieDetails(int? tmdbId)
         {
             // Validate input
             if (tmdbId == null)
                 throw new ArgumentNullException(nameof(tmdbId), "TMDB ID is required to retrieve movie details");
 
-            // Make GET request to Radarr
-            HttpResponseString response = await _radarrHttp.RadarrHttpGet(RadarrGetMovieKey, tmdbId.Value);
+            // Get endpoint and replace ID placeholder
+            var endpoint = _radarrOptions.Endpoints.GetMovie.Replace("{id}", tmdbId.Value.ToString());
+
+            // Send GET request to Radarr with the prepared endpoint
+            HttpResponseString response = await _radarrHttp.RadarrHttpGet(endpoint, tmdbId.Value);
 
             // Deserialize response
             List<MovieDetailsResponse>? movieDetailList = JsonSerializer.Deserialize<List<MovieDetailsResponse>>(response.Response, _jsonOptions);
