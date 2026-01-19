@@ -22,10 +22,10 @@ jobs:
           dotnet-version: "8.0.x"
 
       - name: Restore
-        run: dotnet restore
-
+        run: dotnet restore ./src/MediaBridge.sln
+      
       - name: Build
-        run: dotnet build -c Release --no-restore
+        run: dotnet build ./src/MediaBridge.sln -c Release --no-restore
 
       - name: Publish
         run: dotnet publish .\src\MediaBridge\MediaBridge.csproj -c Release -o "${{ env.PUBLISH_PATH }}" --no-build
