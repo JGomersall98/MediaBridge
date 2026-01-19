@@ -47,12 +47,12 @@ jobs:
 
           Start-Sleep -Seconds 2
 
-      - name: Copy files (exclude logs)
+      - name: Copy files (exclude logs & appsettings)
         shell: powershell
         run: |
-          robocopy "${env:PUBLISH_PATH}" "${env:DEPLOY_PATH}" /MIR /R:2 /W:2 /XD "logs"
+          robocopy "${env:PUBLISH_PATH}" "${env:DEPLOY_PATH}" /MIR /R:2 /W:2 /XD "logs" /XF "appsettings*.json"
           $rc = $LASTEXITCODE
-
+      
           # Robocopy exit codes < 8 are success
           if ($rc -ge 8) { exit 1 }
           exit 0
