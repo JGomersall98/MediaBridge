@@ -28,6 +28,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="Services\Config\" />
     <Folder Include="Services\Media\Movies\" />
     <Folder Include="Services\Media\Tv_Shows\" />
   </ItemGroup>

@@ -1,6 +1,7 @@
 using System.IO;
 using System.Security.Claims;
 using System.Text;
+using MediaBridge.Configuration;
 using MediaBridge.Database;
 using MediaBridge.Models.Authentication;
 using MediaBridge.Services.Admin;
@@ -56,6 +57,18 @@ builder.Services.AddControllers();
 
 var jwtSection = builder.Configuration.GetSection("Jwt");
 builder.Services.Configure<JwtOptions>(jwtSection);
+
+// Configure Radarr and Sonarr options with validation
+builder.Services.AddOptions<RadarrOptions>()
+    .Bind(builder.Configuration.GetSection("Radarr"))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+builder.Services.AddOptions<SonarrOptions>()
+    .Bind(builder.Configuration.GetSection("Sonarr"))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
 var key = Encoding.UTF8.GetBytes(jwtSection["Key"]!);
 
 builder.Services
