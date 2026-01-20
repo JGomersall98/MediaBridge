@@ -332,7 +332,7 @@ namespace MediaBridge.Tests.Integration
             // Assert
             Assert.IsNotNull(result);
             Assert.IsFalse(result.IsSuccess);
-            Assert.Contains("Invalid mediaType", result.Reason);
+            Assert.Contains("Invalid mediaType", result.Reason!);
 
         }
 
