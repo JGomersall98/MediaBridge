@@ -5,7 +5,7 @@ VisualStudioVersion = 17.14.36623.8
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MediaBridge", "MediaBridge.csproj", "{6606BA2D-FDAD-4BDE-9ECB-35FAC189AFE5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MediaBridge.Tests", "..\..\MediaBridge.Tests\MediaBridge.Tests.csproj", "{5E48641B-A9CA-A304-374F-0BBB212638E2}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MediaBridge.Tests", "..\tests\MediaBridge.Tests\MediaBridge.Tests.csproj", "{29CA27A4-8089-A481-2DD5-E59A3E94C1D5}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -17,10 +17,10 @@ Global
 		{6606BA2D-FDAD-4BDE-9ECB-35FAC189AFE5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6606BA2D-FDAD-4BDE-9ECB-35FAC189AFE5}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6606BA2D-FDAD-4BDE-9ECB-35FAC189AFE5}.Release|Any CPU.Build.0 = Release|Any CPU
-		{5E48641B-A9CA-A304-374F-0BBB212638E2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{5E48641B-A9CA-A304-374F-0BBB212638E2}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{5E48641B-A9CA-A304-374F-0BBB212638E2}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{5E48641B-A9CA-A304-374F-0BBB212638E2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{29CA27A4-8089-A481-2DD5-E59A3E94C1D5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{29CA27A4-8089-A481-2DD5-E59A3E94C1D5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{29CA27A4-8089-A481-2DD5-E59A3E94C1D5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{29CA27A4-8089-A481-2DD5-E59A3E94C1D5}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

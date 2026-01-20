@@ -67,6 +67,12 @@ namespace MediaBridge.Services.Media
 
                     await ProcessMediaRequestResult(userId, username, null, showDetails, response.IsSuccess);
                 }
+                else
+                {
+                    response.IsSuccess = false;
+                    response.Reason = "Invalid mediaType. Must be 'movie' or 'show'.";
+                    return response;
+                }
             }
             catch (Exception ex)
             {
@@ -74,9 +80,9 @@ namespace MediaBridge.Services.Media
                 response.IsSuccess = false;
                 response.Reason = $"Exception occurred while sending {mediaType} request: {ex.Message}";
 
-                if(mediaType == "movie")
+                if (mediaType == "movie")
                     await LogMediaRequest(userId, username, mediaId, null, mediaType, "Unknown Title", false, ex.Message);
-                else if(mediaType == "show")
+                else if (mediaType == "show")
                     await LogMediaRequest(userId, username, null, mediaId, mediaType, "Unknown Title", false, ex.Message);
 
                 return response;
@@ -90,10 +96,10 @@ namespace MediaBridge.Services.Media
             }
 
             return response;
-        }    
+        }
         private async Task ProcessMediaRequestResult(int userId, string username, MovieDetailsResponse? movieDetails, ShowDetailsResponse? showDetails, bool success)
-        {           
-            if(movieDetails != null)
+        {
+            if (movieDetails != null)
             {
                 // Process Movie Request
                 await LogMediaRequest(userId, username, movieDetails.TmdbId, null, "movie", movieDetails.Title!, true, null);
@@ -142,7 +148,7 @@ namespace MediaBridge.Services.Media
             SonarrShowDetails show = showDetails.First();
 
             List<SonarrEpisode> episodeDetails = await GetEpisodeInfoFromShow(show.SonarrId);
-            if(!episodeDetails.Any())
+            if (!episodeDetails.Any())
             {
                 StandardResponse errorResponse = new StandardResponse
                 {
@@ -307,7 +313,7 @@ namespace MediaBridge.Services.Media
             {
                 Console.WriteLine($"Failed to log media request: {ex.Message}");
             }
-        }      
+        }
         private async Task SetSonarrApiKeyAsync()
         {
             if (string.IsNullOrEmpty(_sonarrApiKey))
