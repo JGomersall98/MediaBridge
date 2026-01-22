@@ -331,13 +331,18 @@ namespace MediaBridge.Services.Media
                     }
 
                     // Get rating value from MediaMovieInfo where source is "imdb"
-                    double imbdRating = 0;
+                    double? imbdRating = null;
                     foreach (var rating in dynamicInfo.Ratings)
                     {
-                        if (rating.Source == "imdb")
+                        if (rating == null)
+                        {
+                            continue;
+                        }
+
+                        if (string.Equals(rating.Source, "imdb", StringComparison.OrdinalIgnoreCase))
                         {
                             imbdRating = rating.Value;
-                            break; // Exit loop once we find the IMDB rating
+                            break;
                         }
                     }
 
