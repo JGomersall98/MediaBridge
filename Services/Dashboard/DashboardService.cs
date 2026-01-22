@@ -277,7 +277,7 @@ namespace MediaBridge.Services.Dashboard
                 if (matchingShowInfo.Ratings != null)
                 {
                     var imdbRatingInfo = matchingShowInfo.Ratings.FirstOrDefault(r => r.Source == "imdb");
-                    imdbRating = imdbRatingInfo?.Value;
+                    imdbRating = imdbRatingInfo?.Score;
                 }
 
                 // Build the MediaItem
@@ -308,7 +308,7 @@ namespace MediaBridge.Services.Dashboard
             {
                 if (rating.Source == "imdb")
                 {
-                    return rating.Value;
+                    return rating.Score;
                 }
             }
             return null;
